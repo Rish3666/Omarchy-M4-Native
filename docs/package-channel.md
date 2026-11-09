@@ -700,7 +700,19 @@ The tools assume a single key today, so both phases need code changes first:
 - `tools/m4-channel-setup.py` holds one public key and one fingerprint.
 
 The sequence was rehearsed with throwaway keys under pacman 7.1.0 and gnupg
-2.4.9, on Omarchy aarch64 in a sandbox with its own databases and keyrings.
+2.4.9, on Omarchy aarch64. The rehearsal scripts are
+[`tools/key-rotation-trial.sh`](../tools/key-rotation-trial.sh) and
+[`tools/key-rotation-two-phase.sh`](../tools/key-rotation-two-phase.sh).
+Run them as root:
+
+```sh
+sudo bash tools/key-rotation-two-phase.sh [RESULT_DIR]
+```
+
+Each one works in a sandbox under `/var/tmp`, with its own databases, keyrings
+and RootDirs, and runs pacman with no network. The sandbox is deleted at the
+end. The system's pacman state is never touched. `RESULTS.txt` in the run
+folder should list only PASS.
 - The one-step keyring cut an updated machine off its own channel, with
   `key ... is disabled`.
 - With the two phases:

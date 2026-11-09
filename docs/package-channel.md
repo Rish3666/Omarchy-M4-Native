@@ -598,7 +598,7 @@ package's contents without a new version.
 ## Repository, signing and publishing
 
 - **Hosting:** assets of the GitHub release `packages` (pre-release), served at
-  `https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages`.
+  `https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages`.
   Inputs that are not built from this repository live, hash-pinned, in the
   `package-inputs` release. That covers the kernel payload; the devicetree
   comes from the update 1 release.

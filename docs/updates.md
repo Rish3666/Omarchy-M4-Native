@@ -13,7 +13,7 @@ terminal, paste this one line, press Enter, and type your password when
 asked:
 
 ```bash
-curl -fsSL --retry 5 --retry-all-errors https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
+curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
 ```
 
 `m4-connect.sh` downloads the setup script, retrying if Wi-Fi drops a lookup,
@@ -41,7 +41,7 @@ the lines after it.
 
 ```bash
 cd ~ && rm -rf m4-updates && mkdir m4-updates && cd m4-updates &&
-base=https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages &&
+base=https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages &&
 curl -fL -O "$base/omarchy-m4-setup.py" -O "$base/SETUP-SHA256SUMS" &&
 sha256sum -c SETUP-SHA256SUMS &&
 sudo python3 omarchy-m4-setup.py --apply

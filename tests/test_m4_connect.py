@@ -114,7 +114,7 @@ class ConnectScript(unittest.TestCase):
 
     def test_documented_line_retries_too(self):
         line = ('curl -fsSL --retry 5 --retry-all-errors '
-                'https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash')
+                'https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash')
         for doc in ('README.md', 'docs/install.md', 'docs/updates.md', 'tools/m4-connect.sh'):
             with self.subTest(doc):
                 text = (ROOT / doc).read_text()

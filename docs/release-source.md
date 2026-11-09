@@ -121,7 +121,10 @@ the VA-API driver, the speaker daemon) remain `unverified`.
   the difference.
 
 All nine were rebuilt on 2026-10-14 with read-only kernel trees and the
-recorded builder images (clang 21.1.8).
+recorded builder images (clang 21.1.8). The recipes for those images, and the
+images' package versions, are in [`builders/`](../builders/README.md). The
+README also records a rebuild of `m4-gravity-builder` from its recipe, which
+reproduced the display stage2 loaders byte for byte.
 
 `tools/prepare-j713-release.py` scans the finished root and refuses to assemble
 a release in any of these cases:
@@ -261,7 +264,8 @@ table is supplied as `reference-sound-exports.symvers`.
 The historical ARM64 sysroot came from glibc `2.43+r22+g8362e8ce10b2-2`, alsa-lib
 `1.2.16.1-1` and gcc-libs `16.1.1+r12+g301eb08fa2c5-1`. Historical toolchains used
 Rust/Cargo 1.93.1, LLVM/Clang 21.1.8 and GCC 15.2.0. Reconstruct those external
-toolchain/sysroot inputs using the retained recipes and package versions; local
+toolchain/sysroot inputs using the retained recipes and package versions (the
+builder images' recipes are in [`builders/`](../builders/README.md)); local
 Docker image hashes alone are not public download locations. This source packet
 does not claim a fully self-contained or byte-identical clean rebuild. The
 historical filter-generation pipeline passed on native ARM64 macOS 26.5.1

@@ -94,15 +94,21 @@ The package channel similarly requires every binary downloaded from the
 - `unverified`: the source is the likeliest published one, matched by file name
   only.
 
-Every GPL binary is `rebuilt-identical`. Of the 14 MIT userspace entries, 13 are
-now `rebuilt-identical` too; one remains `unverified`.
+Every entry is `rebuilt-identical`: every GPL binary, and all 14 MIT
+userspace entries.
 
-The 13 MIT entries were proven by rebuilds in images rebuilt from
+The MIT entries were proven by rebuilds in images rebuilt from
 [`builders/`](../builders/README.md):
 - **Mesa (11 entries).** These came from a rebuild of `mesa.tar.gz` by the
   recipe in `build-inputs-final.tar.gz`. They are the whole
   `/opt/m4-video/20261011/mesa` set, and the five `/opt/m4-mesa` libraries that
   are the same files.
+- **The `/opt/m4-mesa` libgallium (`21cd0ce4…`).** It is the earlier desktop
+  build, from GravityLinux/mesa `87ac51d411f0` with none of the three patches
+  ([issue #180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180)).
+  That tree is `mesa.tar.gz` with `recipe/mesa-complete.patch` reversed, file
+  for file. Built from it by the same recipe, without the patch, it came out
+  identical.
 - **The VA-API driver.** It was rebuilt from the bridge source and cross file
   in `integration-inputs.tar.gz`.
 - **The speaker daemon.** It was rebuilt from `audio/j713/speakersafetyd` at the
@@ -111,11 +117,6 @@ The 13 MIT entries were proven by rebuilds in images rebuilt from
   daemon joins `j713-audio-speakersafetyd-ee98743a.tar.gz` (`342ad26a…`). That
   archive is made the same way as the kernel modules' archive:
   `git archive --format=tar ee98743a audio/j713/speakersafetyd | gzip -n -9`.
-
-The one that remains `unverified` is the `/opt/m4-mesa` libgallium
-(`21cd0ce4…`). It carries the same version string, but its code differs
-slightly from what `mesa.tar.gz` builds, and its source revision or patches
-are not recorded.
 
 `mesa.tar.gz` is GravityLinux/mesa at `87ac51d411f0` plus
 `recipe/mesa-complete.patch`, file for file.
@@ -160,8 +161,9 @@ a release in any of these cases:
 - a commit-pinned tree differs in the revision being assembled.
 
 It also refuses `unverified` entries, unless `--allow-unverified-source` is
-given to reassemble alpha.1 itself. `IMAGE.json` then lists those entries in
-`source_correspondence_unverified`. Archives that are not part of the retained
+given; `IMAGE.json` then lists those entries in
+`source_correspondence_unverified`. No entry is `unverified` now, so alpha.1
+itself no longer needs the option. Archives that are not part of the retained
 delivery, like the GPU packet, are supplied with `--join-source`.
 
 ## Kernel and audio build joins

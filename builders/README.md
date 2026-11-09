@@ -8,8 +8,8 @@ history by the person who made the images, Kb2uka, in
 **Status:** all four images were rebuilt from these recipes on 2026-11-10.
 `m4-gravity-builder`'s toolchain matched the recorded image exactly. The
 rebuilt images reproduced 27 distinct recorded outputs and six Mesa libraries,
-the speaker daemon and the VA-API driver, byte for byte. One Mesa library, the
-`/opt/m4-mesa` libgallium, was not reproduced (see [Mesa](#mesa)). See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
+the speaker daemon and the VA-API driver, byte for byte. The `/opt/m4-mesa`
+libgallium, an earlier unpatched build, was reproduced too (see [Mesa](#mesa)). See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
 [Outputs rebuilt on 2026-11-10](#outputs-rebuilt-on-2026-11-10).
 
 Every `apt-get` line installs whatever is current in Ubuntu 26.04 when it runs,
@@ -248,14 +248,31 @@ from a clean tree before; this rebuild did that too.
 All six are byte-identical to the shipped files, so those 11 entries in
 `packaging/release-source-joins.json` are `rebuilt-identical`.
 
-The `/opt/m4-mesa` libgallium (`21cd0ce4…`) was not reproduced.
-- It reports the same version, `Mesa 26.3.0-devel (git-87ac51d411)`, but that
-  string comes from `MESA_GIT_SHA1_OVERRIDE`.
-- It is 184 bytes smaller, and its code differs slightly. For example,
-  `apple9_dag_binary_opcode`, which the source has, is not a separate symbol
-  in it.
-- Its source revision or patches are not recorded. Its join stays
-  `unverified`.
+The `/opt/m4-mesa` libgallium (`21cd0ce4…`) did not come from this build. It
+reports the same version, but it is 184 bytes smaller and its code differs
+slightly. Kb2uka explained it in
+[issue #180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180).
+It is the earlier desktop build of 2026-10-08:
+- **Source:** plain GravityLinux/mesa `87ac51d411f0`, with none of the three
+  patches that `mesa-complete.patch` combines.
+- **Version string:** taken from the git checkout, with no override.
+- **Host tools:** built with the source at `/mesa`.
+
+It was rebuilt that way on 2026-11-10, in the same image with
+`--network none`:
+- **Source:** a clean git checkout of that commit. `mesa.tar.gz` with
+  `recipe/mesa-complete.patch` reversed (`git apply -R`) is the same tree, file
+  for file.
+- **Recipe:** `recipe/BUILD.md`, without the patch and without
+  `MESA_GIT_SHA1_OVERRIDE`. The host tools were built from `/mesa`, and the
+  cross build from `/build/mesa`.
+
+| Library | SHA-256 | Shipped as |
+| --- | --- | --- |
+| `libgallium-26.3.0-devel.so` | `21cd0ce471406590ef931db75ba17d90f4c1c895ecf4bca4cec20ae6a834b88c` | `/opt/m4-mesa` |
+
+It came out byte-identical, and its join is `rebuilt-identical`. The other
+five libraries came out the same as in the patched build.
 
 ### Speaker daemon and VA-API driver
 

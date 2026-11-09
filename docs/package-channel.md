@@ -641,10 +641,74 @@ GNUPGHOME=~/.config/omarchy-m4/signing-gnupg gpg --armor --export-secret-keys 57
   gh secret set PACKAGE_SIGNING_KEY --env package-publish
 ```
 
-Keep an offline copy of the private key and its revocation certificate. To
-rotate it, publish a keyring package that adds the new key and revokes the old
-one. Sign it with the old key, then switch the fingerprint in
-`channel.json` and `tools/m4-channel-setup.py`.
+Keep an offline copy of the private key and its revocation certificate.
+
+### Rotating the signing key
+
+Rotate in two phases, each published from `main`. Do not add the new key and
+revoke the old one in the same keyring package. A machine that installs such a
+package disables the old key, and from then on refuses the database, which is
+still signed by the old key. Signing the database with both keys does not
+bridge the gap either. pacman checks every signature in a `.sig` and refuses
+the database if any of them is from a key it does not know, so a machine that
+knows only the old key refuses a database signed by both.
+
+1. **Prepare the new key.** Make an ed25519 key used only for this
+   repository, offline, with its revocation certificate. Keep both next to the
+   old key's.
+2. **Phase 1: add the new key; everything is still signed by the old key.**
+   - Publish a new `omarchy-m4-keyring` version whose `omarchy-m4.gpg` holds
+     both public keys and whose `omarchy-m4-trusted` lists both fingerprints.
+     `omarchy-m4-revoked` stays empty. Its `post_upgrade` runs
+     `pacman-key --populate omarchy-m4`, which adds and locally signs the new
+     key.
+   - Ship `tools/m4-channel-setup.py` with both public keys and both
+     fingerprints. This needs a new `omarchy-m4-boot`, which carries the script.
+     Kits built from then on connect machines that already trust both keys.
+   - The publishing job keeps signing with the old key.
+3. **Wait.** Leave phase 1 published long enough for machines to update. The
+   channel has no way to count them. Any machine that has not installed the
+   phase 1 keyring when phase 2 goes out will need the manual step below.
+4. **Phase 2: switch to the new key and revoke the old one.**
+   - Replace `PACKAGE_SIGNING_KEY` with the new key, and set
+     `signing_fingerprint` in `channel.json` to its fingerprint.
+   - Re-sign every published package, and the databases, with the new key.
+     After this phase, machines refuse anything still signed by the old key,
+     including packages that were published before the rotation.
+   - Publish a keyring version that trusts only the new key and lists the old
+     one in `omarchy-m4-revoked`, signed by the new key. Its populate step
+     disables the old key.
+   - Remove the old key from `tools/m4-channel-setup.py`.
+5. **Machines that missed phase 1.** They know only the old key, so they
+   refuse the phase 2 channel with `key ... is unknown`. Recover such a machine
+   by hand: add the new public key and locally sign it, after checking its
+   fingerprint against this document. The next update then installs the
+   current keyring:
+
+   ```sh
+   sudo pacman-key --add omarchy-m4-new.asc
+   sudo pacman-key --lsign-key <new fingerprint>
+   ```
+
+The tools assume a single key today, so both phases need code changes first:
+- `tools/check-m4-packages.py` accepts a keyring that holds and trusts exactly
+  the channel key. It has to accept the phase 1 and phase 2 keyrings.
+- `tools/publish-m4-packages.py` keeps every published package with its
+  original signature, verified against `signing_fingerprint`. In phase 2 it
+  has to verify the old signature with the old key, and then replace it with
+  one from the new key.
+- `tools/m4-channel-setup.py` holds one public key and one fingerprint.
+
+The sequence was rehearsed with throwaway keys under pacman 7.1.0 and gnupg
+2.4.9, on Omarchy aarch64 in a sandbox with its own databases and keyrings.
+- The one-step keyring cut an updated machine off its own channel, with
+  `key ... is disabled`.
+- With the two phases:
+  - a machine that took phase 1 synced throughout, and refused the old key
+    after phase 2;
+  - a setup that knew both keys connected to the phase 2 channel;
+  - a machine that skipped phase 1 was refused, and updated after the
+    manual step.
 
 ## Corresponding source
 

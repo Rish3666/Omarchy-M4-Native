@@ -28,7 +28,7 @@ Use the account and password you created during setup.
 
 If this Air is not connected to M4 updates yet, connect it now: GPU fixes
 arrive that way. Join Wi-Fi with nmtui, run this line, then restart:
-  curl -fsSL --retry 5 --retry-all-errors https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
+  curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
 
 To inspect the graphics failure:
   sudo journalctl -b -u m4-gpu.service -u sddm.service --no-pager

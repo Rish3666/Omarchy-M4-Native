@@ -2,7 +2,7 @@
   "schema": 1,
   "repository": "omarchy-m4",
   "release_tag": "packages",
-  "server": "https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages",
+  "server": "https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages",
   "signing_fingerprint": "578DF78177CF6DF29B888B8C9404F3CC90797A50",
   "packages": [
     "omarchy-m4-keyring",

@@ -26,7 +26,7 @@ import sys
 import tempfile
 
 REPOSITORY = 'omarchy-m4'
-SERVER = 'https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages'
+SERVER = 'https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages'
 FINGERPRINT = '578DF78177CF6DF29B888B8C9404F3CC90797A50'
 PUBLIC_KEY = '''\
 -----BEGIN PGP PUBLIC KEY BLOCK-----

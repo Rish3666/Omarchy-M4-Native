@@ -34,7 +34,7 @@
 > paste this one line, press Enter and type your password when asked:
 >
 > ```bash
-> curl -fsSL --retry 5 --retry-all-errors https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
+> curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
 > ```
 >
 > - It ends with **`restart once to apply the update`**: restart the Air. That is all.
@@ -105,7 +105,7 @@ online ([details](docs/install.md#last-step-connect-to-m4-updates-required)).
 2. Paste this one line, press Enter, and type your password when asked:
 
 ```bash
-curl -fsSL --retry 5 --retry-all-errors https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
+curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
 ```
 
 3. If it ends with `"status": "connected; restart once to apply the update"`,

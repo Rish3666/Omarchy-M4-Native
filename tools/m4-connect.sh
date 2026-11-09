@@ -4,7 +4,7 @@
 #
 # Connect this M4 Air to the signed [omarchy-m4] update channel in one paste:
 #
-#   curl -fsSL --retry 5 --retry-all-errors https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
+#   curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages/m4-connect.sh | bash
 #
 # The publish step writes the SHA256 of the setup script it publishes into this
 # file. Any other setup script is refused before anything runs. Everything is
@@ -22,7 +22,7 @@ main() {
   if [[ ! -t 0 ]]; then
     exec </dev/null
   fi
-  local base="${M4_CONNECT_BASE:-https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/packages}"
+  local base="${M4_CONNECT_BASE:-https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages}"
   local expected='@SETUP_SHA256@'
   if [[ ! $expected =~ ^[0-9a-f]{64}$ ]]; then
     echo 'm4-connect: this copy has no published checksum; use the one from the packages release' >&2

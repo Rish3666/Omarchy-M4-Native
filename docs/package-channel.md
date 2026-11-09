@@ -717,7 +717,10 @@ The tools follow these lists:
   keyring's `omarchy-m4.gpg`, and then replaced by one from the new key. A
   signature by any other key still stops publishing. The databases are signed
   again, because their published signatures no longer verify against
-  `signing_fingerprint`.
+  `signing_fingerprint`. The verification also works if `omarchy-m4.gpg`
+  carries the old key's revocation certificate. gpg then still reports one
+  good signature by the old key, flagged as revoked, and
+  `tests/test_m4_signing_keys.py` checks this with real gpg.
 - `tools/m4-channel-setup.py` signs every key in `FINGERPRINTS` locally. The
   tests require `FINGERPRINTS` to equal `trusted_fingerprints`, and
   `PUBLIC_KEY` to equal the keyring's `omarchy-m4.gpg`.

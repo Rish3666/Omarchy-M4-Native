@@ -53,7 +53,7 @@ dump (`recon/iodevicetree-full.txt`) — never guessed.
 Initial research: T8132 gap-analysis matrix (ADT × upstream DT × driver
 precedent) + first DT extension patch (SMC, internal NVMe/ANS, mailboxes,
 dockchannel — the evidence-backed set). Repo:
-https://github.com/Kb2uka/Omarchy-M4-Native.
+https://github.com/kazuhidet/Omarchy-M4-Native.
 
 ## 6. Explicitly out of scope
 

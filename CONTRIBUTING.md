@@ -1,7 +1,8 @@
 # Contributing
 
-Omarchy M4 Native is maintained by **studioxradio aka kb2uka**
-([Kb2uka](https://github.com/Kb2uka)). It is experimental on the M4 Air and
+Omarchy M4 Native is maintained by **kazuhidet**
+([kazuhidet](https://github.com/kazuhidet)). It was founded and originally
+maintained by **studioxradio aka kb2uka**. It is experimental on the M4 Air and
 very experimental on other M4 machines. Only the 13-inch M4 Air, Mac16,12 /
 J713, has this project's tested installer profile.
 

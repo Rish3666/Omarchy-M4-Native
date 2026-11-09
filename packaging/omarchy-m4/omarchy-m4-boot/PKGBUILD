@@ -8,7 +8,7 @@ pkgver=1
 pkgrel=19
 pkgdesc='Keeps the J713 boot.bin in step with the packaged M4 kernel and devicetree'
 arch=('aarch64')
-url='https://github.com/Kb2uka/Omarchy-M4-Native'
+url='https://github.com/kazuhidet/Omarchy-M4-Native'
 # The notch stage 2 is an m1n1 build: MIT, with the embedded parts its README lists.
 # GPL-2.0-only covers the retained-bounds kernel image staged beside the base package.
 license=('MIT' 'GPL-2.0-only' 'GPL-2.0-or-later OR MIT' 'BSD-2-Clause OR GPL-2.0-or-later' 'BSD-3-Clause' 'Zlib' 'CC0-1.0' 'OFL-1.1')
@@ -52,7 +52,7 @@ source=('m4-boot-compose.py' '90-omarchy-m4-boot.hook' 'm4-update-check.py'
 sha256sums=('6ace30fa8c07cffbd6ea3af654e1697e77425cae74d6ee91903f2f28238b6a02'
             'e82f9ced0dcff9fc9639fef0baf8da2dd5f168407f161503a757fd52ebcd5559'
             'bf06541caba3709e81b261c60563886e95fff902d811b74f2b49c03e70ee1685'
-            '8ecdbfc8303276d8db5922f6a06aa945f58ebca27b83520f76e9155561b9c5b0'
+            'c13d7bf3b856c224acc02a02af0d667d7db744fd27ef1363ebef55b10c737a36'
             '2e920a979cdf4d8d2075f9f3ab513c5e614eaa126f74b2c01ea5ccf0ab8a9544'
             'b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5'
             'aaf135472f81c5b4a0dca9367e5bb5e9750032b5bebe5442b36e4c0a47430df3'
@@ -64,7 +64,7 @@ sha256sums=('6ace30fa8c07cffbd6ea3af654e1697e77425cae74d6ee91903f2f28238b6a02'
             'afb025a8f1c946d164fe962f20b2e9d5cd987cfc668985eee62e41767722b2aa'
             'ca1fff571cf1b9d8c0b07b2e97ba0a5402f93c1b7a2d54ea2c07e24a8b70f9d0'
             '9d7cc0769bf42b0e742b8201c9564b08fb7714a582881ca31550bec12d14c0cf'
-            'a5847d4ae7b237753f18609ab71b12e569366e7d6df8edfc50ba884eb5698e6c'
+            '8cc45a9e5556a5d4d78710f6c9addbb0a527c4ff19ac2ab7b32833a6d8010732'
             'b86aee6840fe670b592271ec2816d42c5515cddc20a14e08bdc5bcbce547e6fd'
             '692f656cd8f6dfb2530172da518f9e2e18e6c5032df3062cd603eb4539e4c405'
             '11ca423a564b52d3b7f260398baa20d016c25ae180fbdd0067c27b7d1ed7b420'

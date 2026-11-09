@@ -1,6 +1,6 @@
 [Unit]
 Description=Connect this M4 Air to signed M4 updates
-Documentation=https://github.com/Kb2uka/Omarchy-M4-Native/blob/main/docs/updates.md
+Documentation=https://github.com/kazuhidet/Omarchy-M4-Native/blob/main/docs/updates.md
 # Only after the owner's account exists; Wi-Fi usually arrives later, so the
 # timer retries until the setup script succeeds once.
 After=network-online.target omarchy-provision-owner.service

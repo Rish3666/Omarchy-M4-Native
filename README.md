@@ -77,14 +77,14 @@ contributors. Their authorship and licenses remain theirs.
 
 ## Download and install
 
-**[v0.1.0-alpha.1 installer, update 4](https://github.com/Kb2uka/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.4)**,
+**[v0.1.0-alpha.1 installer, update 4](https://github.com/kazuhidet/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.4)**,
 based on **Omarchy 4.0.4**. Its image starts the GPU on every 13-inch M4 Air,
 including the base model's eight-core GPU
-([#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118)). It ships the
+([#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118)). It ships the
 speaker filters in the image, carries the boot fix for Airs that stop on the
-m1n1 logo ([#82](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82)) and
+m1n1 logo ([#82](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82)) and
 connects to M4 updates by itself. No fresh installation from this exact kit has
-been confirmed yet; [update 3](https://github.com/Kb2uka/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.3)
+been confirmed yet; [update 3](https://github.com/kazuhidet/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.3)
 remains available. Download the release's `download-j713.command` and run it
 from macOS Terminal:
 
@@ -116,7 +116,7 @@ curl -fsSL --retry 5 --retry-all-errors https://github.com/kazuhidet/Omarchy-M4-
    `"status": "connected; future M4 fixes arrive with omarchy-m4-update"`, you are done.
 
 If it prints `FAILED` or `omarchy-m4-setup: refused: …`, stop and
-[open an issue](https://github.com/Kb2uka/Omarchy-M4-Native/issues); your Air
+[open an issue](https://github.com/kazuhidet/Omarchy-M4-Native/issues); your Air
 keeps booting as before. No reinstall, and your files are not touched.
 After this, run `omarchy-m4-update` for new M4 fixes; a
 "M4 update available" notification tells you when one is ready.
@@ -147,22 +147,22 @@ once applies them:
 
 | Fix | Since |
 | --- | --- |
-| Shut Down turns the Air off ([#48](https://github.com/Kb2uka/Omarchy-M4-Native/pull/48)) | `omarchy-m4-boot` 1-1 |
-| CPU frequency scaling on all ten cores ([#55](https://github.com/Kb2uka/Omarchy-M4-Native/pull/55)), with the real-time speaker protection it needs | `omarchy-m4-boot` 1-4 |
-| CPU die temperature in Linux ([#62](https://github.com/Kb2uka/Omarchy-M4-Native/pull/62)) | `omarchy-m4-boot` 1-4 |
-| Speaker protection starts reliably at boot ([#61](https://github.com/Kb2uka/Omarchy-M4-Native/pull/61)); applied at the next boot ([details](docs/j713-protection-startup.md#existing-installs)) | `omarchy-m4-speaker` 1-1 |
-| Sound in Zeus Link and other WebKitGTK and GStreamer apps ([#54](https://github.com/Kb2uka/Omarchy-M4-Native/pull/54), [#63](https://github.com/Kb2uka/Omarchy-M4-Native/pull/63)) | `omarchy-m4-gst-audio` 1.28.7-1 |
-| GPU and desktop on Airs whose GPU power limit is below 24800 mW ([#57](https://github.com/Kb2uka/Omarchy-M4-Native/issues/57)); applied at the next boot | `omarchy-m4-gpu` 1-1 |
-| GPU and desktop on base-model Airs with the eight-core GPU ([#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118)); applied at the next boot | `omarchy-m4-gpu` 1-3 |
-| Headphone jack playback ([#88](https://github.com/Kb2uka/Omarchy-M4-Native/pull/88)); starts at the next boot ([details](docs/j713-headphones.md#existing-installs)) | `omarchy-m4-headphones` 1-1 |
-| CPU idle: idle cores power down, so the idle Air runs cooler and draws less ([#65](https://github.com/Kb2uka/Omarchy-M4-Native/issues/65)); starts at the next boot ([details](docs/j713-cpu-idle.md#existing-installs)) | `omarchy-m4-cpu` 1-1 |
-| E cores up to 2172 MHz and a CPU die thermal safety net ([#66](https://github.com/Kb2uka/Omarchy-M4-Native/issues/66)) | `omarchy-m4-boot` 1-10 |
-| P cores boost up to 4464 MHz and E cores up to 2808 MHz under a predictive heat guard ([#66](https://github.com/Kb2uka/Omarchy-M4-Native/issues/66)); starts at the next boot, off switch `sudo m4-cpu-idle --boost off` ([details](docs/j713-cpu-boost.md#existing-installs)) | `omarchy-m4-boot` 1-11, `omarchy-m4-cpu` 1-2 |
-| The boost guard's limits match macOS on the fanless Air (105 C bursts, 100 C sustained), so one busy core runs at its top boost (4.04 GHz, bursts to 4.46 GHz) for most of a 45 s job, and it estimates the die's temperature from heat measured on the Air ([#66](https://github.com/Kb2uka/Omarchy-M4-Native/issues/66), [details](docs/j713-cpu-boost.md#settled-heat-the-base-estimate)) | `omarchy-m4-cpu` 1-3 |
-| Headset microphone on the headphone jack ([#105](https://github.com/Kb2uka/Omarchy-M4-Native/pull/105)); starts at the next boot ([details](docs/j713-headphones.md#headset-microphone)) | `omarchy-m4-headphones` 1-2 |
-| Opt-in: the desktop uses the whole 2560x1664 panel, with the bar's widgets left and right of the camera ([#89](https://github.com/Kb2uka/Omarchy-M4-Native/issues/89)); `sudo m4-notch --show`, then restart; `sudo m4-notch --hide` goes back ([details](docs/j713-notch.md)) | `omarchy-m4-boot` 1-12 |
-| Kernel support for DisplayLink USB adapters and docks; a virtual display was tested, but no physical adapter is qualified yet. **For hardware testing, one extra step:** `yay -S displaylink`, then `sudo systemctl enable --now displaylink.service` (Synaptics' DisplayLinkManager is closed source, so the update cannot ship it). Plain USB-C to HDMI/DisplayPort adapters, USB-C and Thunderbolt monitors, and Thunderbolt dock display ports still do not work ([#58](https://github.com/Kb2uka/Omarchy-M4-Native/issues/58), [details](docs/j713-external-displays.md)) | `omarchy-m4-evdi` 1.15.1-1, `omarchy-m4-boot` 1-13 |
-| Native J713 panel brightness with the brightness keys and normal OSD; starts after the next restart and preserves active custom key bindings ([#146](https://github.com/Kb2uka/Omarchy-M4-Native/pull/146), [details](docs/package-channel.md#omarchy-m4-backlight-1-1-and-omarchy-m4-boot-1-14)) | `omarchy-m4-backlight` 1-1, `omarchy-m4-boot` 1-14 |
+| Shut Down turns the Air off ([#48](https://github.com/kazuhidet/Omarchy-M4-Native/pull/48)) | `omarchy-m4-boot` 1-1 |
+| CPU frequency scaling on all ten cores ([#55](https://github.com/kazuhidet/Omarchy-M4-Native/pull/55)), with the real-time speaker protection it needs | `omarchy-m4-boot` 1-4 |
+| CPU die temperature in Linux ([#62](https://github.com/kazuhidet/Omarchy-M4-Native/pull/62)) | `omarchy-m4-boot` 1-4 |
+| Speaker protection starts reliably at boot ([#61](https://github.com/kazuhidet/Omarchy-M4-Native/pull/61)); applied at the next boot ([details](docs/j713-protection-startup.md#existing-installs)) | `omarchy-m4-speaker` 1-1 |
+| Sound in Zeus Link and other WebKitGTK and GStreamer apps ([#54](https://github.com/kazuhidet/Omarchy-M4-Native/pull/54), [#63](https://github.com/kazuhidet/Omarchy-M4-Native/pull/63)) | `omarchy-m4-gst-audio` 1.28.7-1 |
+| GPU and desktop on Airs whose GPU power limit is below 24800 mW ([#57](https://github.com/kazuhidet/Omarchy-M4-Native/issues/57)); applied at the next boot | `omarchy-m4-gpu` 1-1 |
+| GPU and desktop on base-model Airs with the eight-core GPU ([#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118)); applied at the next boot | `omarchy-m4-gpu` 1-3 |
+| Headphone jack playback ([#88](https://github.com/kazuhidet/Omarchy-M4-Native/pull/88)); starts at the next boot ([details](docs/j713-headphones.md#existing-installs)) | `omarchy-m4-headphones` 1-1 |
+| CPU idle: idle cores power down, so the idle Air runs cooler and draws less ([#65](https://github.com/kazuhidet/Omarchy-M4-Native/issues/65)); starts at the next boot ([details](docs/j713-cpu-idle.md#existing-installs)) | `omarchy-m4-cpu` 1-1 |
+| E cores up to 2172 MHz and a CPU die thermal safety net ([#66](https://github.com/kazuhidet/Omarchy-M4-Native/issues/66)) | `omarchy-m4-boot` 1-10 |
+| P cores boost up to 4464 MHz and E cores up to 2808 MHz under a predictive heat guard ([#66](https://github.com/kazuhidet/Omarchy-M4-Native/issues/66)); starts at the next boot, off switch `sudo m4-cpu-idle --boost off` ([details](docs/j713-cpu-boost.md#existing-installs)) | `omarchy-m4-boot` 1-11, `omarchy-m4-cpu` 1-2 |
+| The boost guard's limits match macOS on the fanless Air (105 C bursts, 100 C sustained), so one busy core runs at its top boost (4.04 GHz, bursts to 4.46 GHz) for most of a 45 s job, and it estimates the die's temperature from heat measured on the Air ([#66](https://github.com/kazuhidet/Omarchy-M4-Native/issues/66), [details](docs/j713-cpu-boost.md#settled-heat-the-base-estimate)) | `omarchy-m4-cpu` 1-3 |
+| Headset microphone on the headphone jack ([#105](https://github.com/kazuhidet/Omarchy-M4-Native/pull/105)); starts at the next boot ([details](docs/j713-headphones.md#headset-microphone)) | `omarchy-m4-headphones` 1-2 |
+| Opt-in: the desktop uses the whole 2560x1664 panel, with the bar's widgets left and right of the camera ([#89](https://github.com/kazuhidet/Omarchy-M4-Native/issues/89)); `sudo m4-notch --show`, then restart; `sudo m4-notch --hide` goes back ([details](docs/j713-notch.md)) | `omarchy-m4-boot` 1-12 |
+| Kernel support for DisplayLink USB adapters and docks; a virtual display was tested, but no physical adapter is qualified yet. **For hardware testing, one extra step:** `yay -S displaylink`, then `sudo systemctl enable --now displaylink.service` (Synaptics' DisplayLinkManager is closed source, so the update cannot ship it). Plain USB-C to HDMI/DisplayPort adapters, USB-C and Thunderbolt monitors, and Thunderbolt dock display ports still do not work ([#58](https://github.com/kazuhidet/Omarchy-M4-Native/issues/58), [details](docs/j713-external-displays.md)) | `omarchy-m4-evdi` 1.15.1-1, `omarchy-m4-boot` 1-13 |
+| Native J713 panel brightness with the brightness keys and normal OSD; starts after the next restart and preserves active custom key bindings ([#146](https://github.com/kazuhidet/Omarchy-M4-Native/pull/146), [details](docs/package-channel.md#omarchy-m4-backlight-1-1-and-omarchy-m4-boot-1-14)) | `omarchy-m4-backlight` 1-1, `omarchy-m4-boot` 1-14 |
 
 A devicetree you applied by hand from the guides is kept; the update never
 moves an Air back to an older one. An Air connected before
@@ -179,7 +179,7 @@ the Air turns off and stays off. Verified on the test Air on October 12, 2026.
 alpha.1 without the fix restarted instead, so run the
 [connect step](#then-connect-to-m4-updates--everyone-once) if you haven't.
 [What was wrong and how it was fixed](docs/j713-poweroff.md) ·
-[issue #24](https://github.com/Kb2uka/Omarchy-M4-Native/issues/24) (closed).
+[issue #24](https://github.com/kazuhidet/Omarchy-M4-Native/issues/24) (closed).
 
 ## What has been observed on the test Air
 

@@ -151,7 +151,7 @@ DTC 1.8.1 (`dtc` and `fdtoverlay`). Use the `j713-poweroff.dtb` asset of
 `v0.1.0-alpha.1-update.1` as the base:
 
 ```bash
-curl -fL -O https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-update.1/j713-poweroff.dtb
+curl -fL -O https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-update.1/j713-poweroff.dtb
 sha256sum j713-poweroff.dtb  # must be e54c77a760a5b696486f9d80c7c83ca4295d641113bb9e54d13e259863bf9b07
 python3 tools/build-j713-cpufreq-dtb.py --base j713-poweroff.dtb --output j713-cpufreq.dtb
 sha256sum j713-cpufreq.dtb   # must be 033025bbdda3ce72b5eefe39d1d6d68209256fd43e4fd587c96ae1cf38978555

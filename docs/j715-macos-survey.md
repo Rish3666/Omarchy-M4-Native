@@ -2,7 +2,7 @@
 
 Read-only survey of a 15-inch M4 MacBook Air (Mac16,13), made on the owner's
 machine from 2026-10-15 to 2026-10-19 for
-[#142](https://github.com/Kb2uka/Omarchy-M4-Native/issues/142). Nothing in this
+[#142](https://github.com/kazuhidet/Omarchy-M4-Native/issues/142). Nothing in this
 page needed anything installed on the machine. The raw dumps are kept privately
 because they contain serial numbers, MAC addresses and other machine
 identifiers; see

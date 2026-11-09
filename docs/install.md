@@ -131,9 +131,9 @@ Update 4's image carries the GPU module that starts the GPU on every 13-inch
 M4 Air. The kits through update 3 have alpha.1's GPU module instead. It starts
 the GPU only on an Air with the ten-core GPU whose GPU power limit is exactly
 24800 mW. Two of the three ten-core Airs measured so far are lower
-([#57](https://github.com/Kb2uka/Omarchy-M4-Native/issues/57)), and the
+([#57](https://github.com/kazuhidet/Omarchy-M4-Native/issues/57)), and the
 base-model Air's eight-core GPU is refused outright
-([#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118)); both reach
+([#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118)); both reach
 this login instead of the desktop.
 From the recovery login, do the [last step](#last-step-connect-to-m4-updates-required)
 now: `nmtui` works here, and so does the connect line. Then restart. The update

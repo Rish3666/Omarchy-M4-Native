@@ -1,7 +1,7 @@
 # J773g (Mac mini, M4) — macOS-side survey
 
 Read-only survey of a plain M4 Mac mini, posted by the reporter of
-[#136](https://github.com/Kb2uka/Omarchy-M4-Native/issues/136) on 2026-10-18.
+[#136](https://github.com/kazuhidet/Omarchy-M4-Native/issues/136) on 2026-10-18.
 The reporter ran the survey commands in macOS and attached the output. Nothing
 was installed on the machine. The raw files are kept privately because they
 contain serial numbers and other machine identifiers; see

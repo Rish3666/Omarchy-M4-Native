@@ -1,6 +1,6 @@
 # Retained audio and DockChannel transport hardening
 
-[Issue 43](https://github.com/Kb2uka/Omarchy-M4-Native/issues/43) covers the
+[Issue 43](https://github.com/kazuhidet/Omarchy-M4-Native/issues/43) covers the
 retained MCA arithmetic and DockChannel packet bounds. The MCA correction now
 lives in the source used by the audio build. The kernel candidate recipe applies
 the complete DockChannel correction after the historical input patches.
@@ -218,10 +218,10 @@ install a kernel or update a qualified manifest.
 
 ## Native and delivery gate
 
-[Pull request 156](https://github.com/Kb2uka/Omarchy-M4-Native/pull/156)
+[Pull request 156](https://github.com/kazuhidet/Omarchy-M4-Native/pull/156)
 changes the source and the build only. It does not publish a channel.
 Native testing and package migration are in the dependent
-[pull request 157](https://github.com/Kb2uka/Omarchy-M4-Native/pull/157).
+[pull request 157](https://github.com/kazuhidet/Omarchy-M4-Native/pull/157).
 On the installed J713, an initial upgrade, rollback, reapply, and repeat
 boot completed with this same image and MCA module
 (`ca1fff571cf1b9d8c0b07b2e97ba0a5402f93c1b7a2d54ea2c07e24a8b70f9d0`,
@@ -243,11 +243,11 @@ hardware. A fresh install, suspend, human listening, and physical typing
 were not performed.
 
 Hosted CI for source commit `dc191cb3e7dc935cb5f4e13a5b44f2a835a6a331`
-passed [1,283 Linux tests in 80.058 seconds](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39533130154).
+passed [1,283 Linux tests in 80.058 seconds](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39533130154).
 The Rust, macOS and policy jobs on that run passed.
-[CodeQL](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39533130213),
-[security checks](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39533130159)
-and [package checks](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39533130165)
+[CodeQL](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39533130213),
+[security checks](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39533130159)
+and [package checks](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39533130165)
 also passed at that source commit. Later documentation-only changes are
 outside these revision-specific results.
 

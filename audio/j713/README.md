@@ -19,7 +19,7 @@ unchanged and still identifies the historical binaries. Build receipts keep
 `native_qualified` and `fresh_install_qualified` false because the builder
 does not perform hardware qualification. Installed-Air validation and package
 migration are recorded separately in
-[the dependent rollout](https://github.com/Kb2uka/Omarchy-M4-Native/pull/157);
+[the dependent rollout](https://github.com/kazuhidet/Omarchy-M4-Native/pull/157);
 fresh installation is not claimed. The production channel has not shipped it.
 This source package is an explicit,
 fail-closed addition to a pending ext4 owner image. It does not alter a running

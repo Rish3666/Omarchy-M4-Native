@@ -68,5 +68,5 @@ repository does not ship yet.
   boot devicetree should have the same window (not checked on a J713). It is a
   short early-boot excursion at boot temperatures, but the gate does not hold P
   at 1800 MHz from the first moment
-  ([#145](https://github.com/Kb2uka/Omarchy-M4-Native/issues/145)).
+  ([#145](https://github.com/kazuhidet/Omarchy-M4-Native/issues/145)).
 - The speaker, GPU and CPU idle need later work for the J715 in this repository.

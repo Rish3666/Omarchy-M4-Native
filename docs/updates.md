@@ -31,7 +31,7 @@ show one of:
   installation failed, `pacman.conf` is put back as it was. In every case your
   Air keeps booting exactly as before. Fix the stated cause (for example free
   space on the EFI partition) and run the block again, or report it in
-  [issue #49](https://github.com/Kb2uka/Omarchy-M4-Native/issues/49).
+  [issue #49](https://github.com/kazuhidet/Omarchy-M4-Native/issues/49).
 
 ### Step by step instead
 
@@ -128,8 +128,8 @@ needs nothing new from it: `omarchy-m4-update` brings the same GPU module as
 `omarchy-m4-gpu` 1-3, and the stage 1 loader is update 3's.
 
 - **The GPU starts on every 13-inch M4 Air**
-  ([#57](https://github.com/Kb2uka/Omarchy-M4-Native/issues/57),
-  [#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118)). The image
+  ([#57](https://github.com/kazuhidet/Omarchy-M4-Native/issues/57),
+  [#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118)). The image
   runs GPU module `de0337a7…` in place of alpha.1's `80cf3669…`. It accepts
   each Air's own GPU power limit up to 24800 mW and the base model's
   eight-core GPU, so a fresh install reaches the desktop on its first boot
@@ -148,20 +148,20 @@ needs nothing from it: everything it adds to the system also arrives through
 `omarchy-m4-update`, except the stage 1 loader below.
 
 - **Speaker filters ship in the image**
-  ([#111](https://github.com/Kb2uka/Omarchy-M4-Native/pull/111)). The kit no
+  ([#111](https://github.com/kazuhidet/Omarchy-M4-Native/pull/111)). The kit no
   longer reads the Mac's AudioDSP before partitioning, so a macOS build the
   filter step did not know (such as macOS 27 betas) is no longer refused there.
   Other installer dependencies are not yet qualified on macOS 27.
 - **m1n1 stage 1 no longer resets ANS on an M4**
-  ([#82](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82),
-  [#110](https://github.com/Kb2uka/Omarchy-M4-Native/pull/110)), which stopped
+  ([#82](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82),
+  [#110](https://github.com/kazuhidet/Omarchy-M4-Native/pull/110)), which stopped
   some Airs on the m1n1 logo at every boot. An installed Air gets this loader
   only through the 1TR `kmutil` step in
   [j713-m1n1-issue82-ans-reset.md](j713-m1n1-issue82-ans-reset.md).
 - **First boot connects to M4 updates by itself**
-  ([#74](https://github.com/Kb2uka/Omarchy-M4-Native/pull/74)), so the connect
+  ([#74](https://github.com/kazuhidet/Omarchy-M4-Native/pull/74)), so the connect
   step below is not needed, and the image carries the GPU start journal fix
-  ([#108](https://github.com/Kb2uka/Omarchy-M4-Native/pull/108)) and the
+  ([#108](https://github.com/kazuhidet/Omarchy-M4-Native/pull/108)) and the
   shutdown devicetree of update 1.
 
 The kit lands in `~/Downloads/Omarchy-M4-v0.1.0-alpha.1-update.3/installer/`;
@@ -173,7 +173,7 @@ use that directory in place of update 2's in the installation guide.
 only**. The original alpha.1 kit stops before any partition change on macOS
 26.6.2 (25G83), because that release ships a different AudioDSP build than the
 speaker-filter step knew. Update 2 qualifies it
-([#83](https://github.com/Kb2uka/Omarchy-M4-Native/pull/83)). The system image
+([#83](https://github.com/kazuhidet/Omarchy-M4-Native/pull/83)). The system image
 is the same alpha.1 image, byte for byte. An Air that is already installed needs
 nothing from it.
 
@@ -182,7 +182,7 @@ nothing from it.
 **Connecting to M4 updates (above) already applies this fix**; the composer
 produces the same boot object, byte for byte. This standalone update remains for
 anyone who prefers not to connect. **What it fixes:** Shut Down restarting the
-Air ([issue #24](https://github.com/Kb2uka/Omarchy-M4-Native/issues/24)).
+Air ([issue #24](https://github.com/kazuhidet/Omarchy-M4-Native/issues/24)).
 **Reinstall needed:** no.
 
 ### Quick version
@@ -192,7 +192,7 @@ password when asked:
 
 ```bash
 cd ~ && rm -rf m4-update-1 && mkdir m4-update-1 && cd m4-update-1 &&
-base=https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-update.1 &&
+base=https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-update.1 &&
 curl -fL -O "$base/j713-poweroff.dtb" -O "$base/m4-j713-update-boot-dtb.py" -O "$base/SHA256SUMS" &&
 sha256sum -c SHA256SUMS &&
 sudo python3 m4-j713-update-boot-dtb.py --dtb j713-poweroff.dtb --apply
@@ -201,7 +201,7 @@ sudo python3 m4-j713-update-boot-dtb.py --dtb j713-poweroff.dtb --apply
 - `"status": "updated; takes effect at next boot"`: restart the Air. Done.
 - `"status": "already updated"`: you already have it.
 - `FAILED` or any error: stop. Nothing is written unless every check passes. Please
-  [open an issue](https://github.com/Kb2uka/Omarchy-M4-Native/issues).
+  [open an issue](https://github.com/kazuhidet/Omarchy-M4-Native/issues).
 
 ### What it does
 

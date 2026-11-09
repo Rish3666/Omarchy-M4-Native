@@ -133,9 +133,9 @@ supplies the separate real-hook evidence; neither test substitutes for the
 other.
 
 The earlier package revision `0bcf42915012521ac7b40e3d3ba5735304c40b9b` passed
-[1,368 Linux tests in 81.066 seconds](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39541326985),
-[package CI](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39541326954)
-and [all four CodeQL language analyses](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39541327047).
+[1,368 Linux tests in 81.066 seconds](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39541326985),
+[package CI](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39541326954)
+and [all four CodeQL language analyses](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39541327047).
 The original arithmetic alert is fixed on develop; the marker-permissions
 finding is fixed in the rollout analysis. Neither was dismissed or suppressed.
 The signed package sandbox additionally demonstrates retaining newer installed
@@ -143,9 +143,9 @@ packages while still applying a legitimate upgrade. It does not substitute for
 the native public-channel handoff above.
 
 The final packaged helper revision `3a8ea0a` passed
-[1,386 Linux tests in 81.918 seconds](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39549213413),
-[package CI](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39549213268)
-and [all four CodeQL analyses](https://github.com/Kb2uka/Omarchy-M4-Native/actions/runs/39549213362).
+[1,386 Linux tests in 81.918 seconds](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39549213413),
+[package CI](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39549213268)
+and [all four CodeQL analyses](https://github.com/kazuhidet/Omarchy-M4-Native/actions/runs/39549213362).
 Its separate ten-package build, strict archive checks and signed sandbox
 installation also passed. Later test and documentation changes do not alter
 the packaged helper bytes or the native identities recorded here.

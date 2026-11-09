@@ -37,7 +37,7 @@ CONNECT_HASH = '@SETUP_SHA256@'
 SOURCE_ARCHIVE = 'release-integration-{revision}.tar.gz'
 SOURCE_REVISION = 'release-integration-revision.txt'
 NOTES = ('Signed pacman repository for the experimental M4 build ([issue #49]'
-         '(https://github.com/Kb2uka/Omarchy-M4-Native/issues/49)). Owners connect once with '
+         '(https://github.com/kazuhidet/Omarchy-M4-Native/issues/49)). Owners connect once with '
          '`m4-connect.sh` (it checks and runs `omarchy-m4-setup.py`); see docs/updates.md. Not an installer.')
 
 

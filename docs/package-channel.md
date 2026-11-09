@@ -3,7 +3,7 @@
 Installed M4 machines receive kernel, devicetree and boot-object fixes as signed
 pacman packages from the `[omarchy-m4]` repository, through
 `omarchy-m4-update`, without reinstalling
-([issue #49](https://github.com/Kb2uka/Omarchy-M4-Native/issues/49)). Owners
+([issue #49](https://github.com/kazuhidet/Omarchy-M4-Native/issues/49)). Owners
 connect once; see [updates.md](updates.md). This page is for maintainers and
 reviewers.
 
@@ -54,7 +54,7 @@ reviewers.
   channel packages, never the rest of the system. The update notifier now says
   to run it.
 - **`omarchy-m4-speaker`** delivers the speaker protection startup fix
-  ([#61](https://github.com/Kb2uka/Omarchy-M4-Native/pull/61)). The audio modules
+  ([#61](https://github.com/kazuhidet/Omarchy-M4-Native/pull/61)). The audio modules
   stay manifest-managed outside pacman, so the package does not overwrite them.
   It stages the fixed `snd-soc-j713-group.ko` (`aaad802e…`) under
   `/usr/lib/omarchy-m4/`. A drop-in on `m4-j713-audio-register.service`
@@ -68,8 +68,8 @@ reviewers.
 ### omarchy-m4-boot 1-6 and omarchy-m4-gpu 1-1
 
 - **`omarchy-m4-gpu`** delivers the Air GPU power-limit fix
-  ([#57](https://github.com/Kb2uka/Omarchy-M4-Native/issues/57),
-  [#80](https://github.com/Kb2uka/Omarchy-M4-Native/pull/80)). alpha.1's module
+  ([#57](https://github.com/kazuhidet/Omarchy-M4-Native/issues/57),
+  [#80](https://github.com/kazuhidet/Omarchy-M4-Native/pull/80)). alpha.1's module
   required a GPU power limit of exactly 24800 mW, which only a 1000 mV top GPU
   state gives, so other Airs got no GPU and no desktop. The fixed module
   (`3cf47fa7…`, 390,752 bytes, built from [`gpu/j713/`](../gpu/j713/README.md)
@@ -153,7 +153,7 @@ file.
 
 ### omarchy-m4-boot 1-9
 
-- **Lid close locks the screen on installed Airs** ([#84](https://github.com/Kb2uka/Omarchy-M4-Native/issues/84)).
+- **Lid close locks the screen on installed Airs** ([#84](https://github.com/kazuhidet/Omarchy-M4-Native/issues/84)).
   The image fix (#85) reached only new images; this delivers it through
   `omarchy-m4-update`. The install script runs `m4-lid-lock.py`, which writes
   the lock screen's PAM file when it is missing and appends the two lid binds
@@ -211,7 +211,7 @@ file.
 ### omarchy-m4-cpu 1-4
 
 - **Orderly stop during the settle period**
-  ([#130](https://github.com/Kb2uka/Omarchy-M4-Native/issues/130)): a clean
+  ([#130](https://github.com/kazuhidet/Omarchy-M4-Native/issues/130)): a clean
   SIGTERM (service restart or shutdown) while `m4-cpu-idle --boot` or `--start`
   is settling now runs the marker cleanup as the loader stops, so the next boot
   loads the driver instead of refusing on a stale strike. The previous signal
@@ -262,7 +262,7 @@ file.
 ### omarchy-m4-gpu 1-2
 
 - **A failed GPU start can be read from the journal**
-  ([#82](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82)). alpha.1's
+  ([#82](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82)). alpha.1's
   `m4-gpu.service` appends `m4-gpu-start`'s output to `/tmp/m4-gpu-start.log`,
   which a restart clears, so the "desktop could not start" notice's
   `journalctl -u m4-gpu.service` showed nothing from the script. The drop-in now
@@ -278,7 +278,7 @@ file.
 ### omarchy-m4-boot 1-12
 
 - **Opt-in full-panel desktop** ([J713 camera notch](j713-notch.md),
-  [#89](https://github.com/Kb2uka/Omarchy-M4-Native/issues/89)):
+  [#89](https://github.com/kazuhidet/Omarchy-M4-Native/issues/89)):
   `sudo m4-notch --show` makes the next boot use all 2560x1664 pixels, with the
   Omarchy bar's center widgets split left and right of the camera.
   `sudo m4-notch --hide` goes back. Installing the package changes nothing.
@@ -302,7 +302,7 @@ file.
 ### omarchy-m4-gpu 1-3
 
 - **GPU and desktop on the eight-core GPU**
-  ([#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118), by Jeff
+  ([#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118), by Jeff
   Hollis). The base-model Air's GPU has the same ten core positions with two
   fused off. The #57 module accepted only the ten-core mask `0x3ff`, so an
   eight-core Air (one reports `0x3bd`) got no GPU and no desktop. The module
@@ -632,10 +632,10 @@ package's contents without a new version.
 
 ```sh
 # Environment limited to main, then the key, read from the maintainer's offline copy.
-gh api -X PUT repos/Kb2uka/Omarchy-M4-Native/environments/package-publish \
+gh api -X PUT repos/kazuhidet/Omarchy-M4-Native/environments/package-publish \
   -F 'deployment_branch_policy[protected_branches]=false' \
   -F 'deployment_branch_policy[custom_branch_policies]=true'
-gh api -X POST repos/Kb2uka/Omarchy-M4-Native/environments/package-publish/deployment-branch-policies \
+gh api -X POST repos/kazuhidet/Omarchy-M4-Native/environments/package-publish/deployment-branch-policies \
   -f name=main -f type=branch
 GNUPGHOME=~/.config/omarchy-m4/signing-gnupg gpg --armor --export-secret-keys 578DF78177CF6DF29B888B8C9404F3CC90797A50 |
   gh secret set PACKAGE_SIGNING_KEY --env package-publish
@@ -662,7 +662,7 @@ as stale joins. Joins stay `unverified` until a byte-identical rebuild is record
 
 - **Kernel (`linux-m4-omarchy`):** The kernel package's build identity is recorded
   from the kernel tree and configuration published with
-  [v0.1.0-alpha.1](https://github.com/Kb2uka/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1)
+  [v0.1.0-alpha.1](https://github.com/kazuhidet/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1)
   (`source/kernel-controller.tar.gz`), plus the J713 input patches in
   `patches-kernel/j713-input/` in this repository; as with the release kernel, a
   byte-identical rebuild is not claimed.

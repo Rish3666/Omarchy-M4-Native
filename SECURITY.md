@@ -1,9 +1,9 @@
 # Security
 
 Report suspected vulnerabilities privately through
-[Report a vulnerability](https://github.com/Kb2uka/Omarchy-M4-Native/security/advisories/new).
+[Report a vulnerability](https://github.com/kazuhidet/Omarchy-M4-Native/security/advisories/new).
 If that form is unavailable, contact the maintainer through the contact links on
-[the maintainer profile](https://github.com/Kb2uka). Do not post passwords,
+[the maintainer profile](https://github.com/kazuhidet). Do not post passwords,
 private keys, personal firmware, browser profiles or exploit payloads in issues.
 
 This experimental project changes boot policy and installs privileged software.

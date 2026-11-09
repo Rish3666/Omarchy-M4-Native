@@ -2,7 +2,7 @@
 
 A monitor plugged straight into a USB-C port, or through a Thunderbolt dock,
 shows nothing on the M4 Air under Linux, and this project cannot fix that yet
-([issue #58](https://github.com/Kb2uka/Omarchy-M4-Native/issues/58)). A
+([issue #58](https://github.com/kazuhidet/Omarchy-M4-Native/issues/58)). A
 USB display adapters use a separate path. `omarchy-m4-update` supplies the
 DisplayLink kernel module and library; a virtual display passed the Air test
 below. A physical DisplayLink adapter and its manager have not been qualified.
@@ -98,7 +98,7 @@ hl.monitor({ output = "DVI-I-1", mode = "preferred", position = "auto", scale = 
 Not yet checked: a physical DisplayLink adapter on this Air,
 DisplayLinkManager's aarch64 build against this `libevdi`, several monitors at
 once, and suspend/resume. Reports are welcome on
-[issue #58](https://github.com/Kb2uka/Omarchy-M4-Native/issues/58).
+[issue #58](https://github.com/kazuhidet/Omarchy-M4-Native/issues/58).
 
 ## What was tested (owner's Air, 2026-10-17)
 

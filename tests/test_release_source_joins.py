@@ -227,11 +227,24 @@ class ManifestTests(unittest.TestCase):
                          (shipped['sha256'], shipped['license'], shipped['sources']))
         self.assertEqual(gpu['sources'][1:], alpha1_tree)
         # Every GPL binary was rebuilt byte for byte from published source (GPU: issue 77;
-        # audio and video modules: 2026-10-14). The MIT userspace remains unverified.
+        # audio and video modules: 2026-10-14). Mesa was rebuilt from mesa.tar.gz on 2026-11-10
+        # (builders/README.md): all of it but the /opt/m4-mesa libgallium came out identical.
+        # That libgallium, the VA-API driver and the speaker daemon remain unverified.
+        unverified = {'opt/m4-mesa/lib/libgallium-26.3.0-devel.so'}
         for name, entry in binaries.items():
             with self.subTest(name=name):
-                self.assertEqual(entry['correspondence'],
-                                 'rebuilt-identical' if entry['license'].startswith('GPL') else 'unverified')
+                mesa = '/m4-mesa/' in name or '/m4-video/20261011/mesa/' in name
+                rebuilt = entry['license'].startswith('GPL') or (mesa and name not in unverified)
+                self.assertEqual(entry['correspondence'], 'rebuilt-identical' if rebuilt else 'unverified')
+                if mesa and rebuilt:
+                    self.assertIn({'archive': 'source/mesa.tar.gz',
+                                   'sha256': '75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9'},
+                                  entry['sources'])
+        self.assertEqual(sorted(name for name, entry in binaries.items()
+                                if entry['correspondence'] == 'unverified'),
+                         ['opt/m4-mesa/lib/libgallium-26.3.0-devel.so',
+                          'opt/m4-video/20261011/vaapi/v4l2_request_drv_video.so',
+                          *sorted(name for name in binaries if 'speakersafetyd' in name)])
         audio = [entry for name, entry in binaries.items() if '/j713-audio/' in name and name.endswith('.ko')]
         self.assertEqual(len(audio), 7)
         # audio/j713/kernel changed after the tag (#61), so its five modules join an archive of

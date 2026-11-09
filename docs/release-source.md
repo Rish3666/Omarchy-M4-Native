@@ -94,8 +94,24 @@ The package channel similarly requires every binary downloaded from the
 - `unverified`: the source is the likeliest published one, matched by file name
   only.
 
-Every GPL binary is `rebuilt-identical`; the 14 MIT userspace entries (Mesa,
-the VA-API driver, the speaker daemon) remain `unverified`.
+Every GPL binary is `rebuilt-identical`. Of the 14 MIT userspace entries, the 11
+Mesa entries that were reproduced are now `rebuilt-identical`; three remain
+`unverified`.
+
+The 11 Mesa entries came from a rebuild of `mesa.tar.gz` by the recipe in
+`build-inputs-final.tar.gz` (see [`builders/`](../builders/README.md)). They
+are the whole `/opt/m4-video/20261011/mesa` set, and the five `/opt/m4-mesa`
+libraries that are the same files.
+
+The three that remain `unverified`:
+- **The `/opt/m4-mesa` libgallium (`21cd0ce4…`).** It carries the same version
+  string, but its code differs slightly from what that source builds, and its
+  source revision or patches are not recorded.
+- **The VA-API driver.**
+- **The speaker daemon.**
+
+`mesa.tar.gz` is GravityLinux/mesa at `87ac51d411f0` plus
+`recipe/mesa-complete.patch`, file for file.
 
 - **GPU modules:** the published `kernel-controller.tar.gz` with the four Air
   GPU files from `omarchy-j713-v0.1.0-alpha.1-gpu-air-source.tar.gz` reproduces

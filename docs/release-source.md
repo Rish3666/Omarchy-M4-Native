@@ -94,21 +94,28 @@ The package channel similarly requires every binary downloaded from the
 - `unverified`: the source is the likeliest published one, matched by file name
   only.
 
-Every GPL binary is `rebuilt-identical`. Of the 14 MIT userspace entries, the 11
-Mesa entries that were reproduced are now `rebuilt-identical`; three remain
-`unverified`.
+Every GPL binary is `rebuilt-identical`. Of the 14 MIT userspace entries, 13 are
+now `rebuilt-identical` too; one remains `unverified`.
 
-The 11 Mesa entries came from a rebuild of `mesa.tar.gz` by the recipe in
-`build-inputs-final.tar.gz` (see [`builders/`](../builders/README.md)). They
-are the whole `/opt/m4-video/20261011/mesa` set, and the five `/opt/m4-mesa`
-libraries that are the same files.
+The 13 MIT entries were proven by rebuilds in images rebuilt from
+[`builders/`](../builders/README.md):
+- **Mesa (11 entries).** These came from a rebuild of `mesa.tar.gz` by the
+  recipe in `build-inputs-final.tar.gz`. They are the whole
+  `/opt/m4-video/20261011/mesa` set, and the five `/opt/m4-mesa` libraries that
+  are the same files.
+- **The VA-API driver.** It was rebuilt from the bridge source and cross file
+  in `integration-inputs.tar.gz`.
+- **The speaker daemon.** It was rebuilt from `audio/j713/speakersafetyd` at the
+  v0.1.0-alpha.1 tag, with the vendored crates of
+  `j713-audio-cargo-sources.tar.gz`. The tree changed after the tag, so the
+  daemon joins `j713-audio-speakersafetyd-ee98743a.tar.gz` (`342ad26a…`). That
+  archive is made the same way as the kernel modules' archive:
+  `git archive --format=tar ee98743a audio/j713/speakersafetyd | gzip -n -9`.
 
-The three that remain `unverified`:
-- **The `/opt/m4-mesa` libgallium (`21cd0ce4…`).** It carries the same version
-  string, but its code differs slightly from what that source builds, and its
-  source revision or patches are not recorded.
-- **The VA-API driver.**
-- **The speaker daemon.**
+The one that remains `unverified` is the `/opt/m4-mesa` libgallium
+(`21cd0ce4…`). It carries the same version string, but its code differs
+slightly from what `mesa.tar.gz` builds, and its source revision or patches
+are not recorded.
 
 `mesa.tar.gz` is GravityLinux/mesa at `87ac51d411f0` plus
 `recipe/mesa-complete.patch`, file for file.
@@ -139,7 +146,7 @@ The three that remain `unverified`:
 All nine were rebuilt on 2026-10-14 with read-only kernel trees and the
 recorded builder images (clang 21.1.8). The recipes for those images, and the
 images' package versions, are in [`builders/`](../builders/README.md). The
-README also records the rebuild of all three images from those recipes. The
+README also records the rebuild of all four images from those recipes. The
 rebuilt images reproduced 27 distinct recorded outputs byte for byte,
 including all nine binaries above.
 

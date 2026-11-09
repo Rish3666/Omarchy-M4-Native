@@ -5,11 +5,11 @@ These are the recipes for the Docker images that the build scripts and
 history by the person who made the images, Kb2uka, in
 [issue #180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180#issuecomment-6737887823).
 
-**Status:** all three images were rebuilt from these recipes on 2026-11-10.
+**Status:** all four images were rebuilt from these recipes on 2026-11-10.
 `m4-gravity-builder`'s toolchain matched the recorded image exactly. The
 rebuilt images reproduced 27 distinct recorded outputs and six Mesa libraries,
-byte for byte. One Mesa library, the `/opt/m4-mesa` libgallium, was not
-reproduced (see [Mesa](#mesa)). See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
+the speaker daemon and the VA-API driver, byte for byte. One Mesa library, the
+`/opt/m4-mesa` libgallium, was not reproduced (see [Mesa](#mesa)). See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
 [Outputs rebuilt on 2026-11-10](#outputs-rebuilt-on-2026-11-10).
 
 Every `apt-get` line installs whatever is current in Ubuntu 26.04 when it runs,
@@ -20,7 +20,7 @@ image for any other output:
 
 ## The images
 
-All three are `linux/amd64` images. They start from the official
+All four are `linux/amd64` images. They start from the official
 `ubuntu:26.04` (resolute) image, pinned by digest, and install only from
 Ubuntu's archive, with no apt.llvm.org and no rustup. The apt sources are the
 base image's defaults:
@@ -33,6 +33,7 @@ base image's defaults:
 | `m4-gravity-builder:20261008` | `sha256:b2069edb8a23761d9211559fe632f5464aebc4cdfa9558d0f4c93211890fd7b1` | [`m4-gravity-builder/`](m4-gravity-builder/Dockerfile) | kernel, GPU, CPU, m1n1 and display loaders, and most source joins |
 | `m4-gravity-mesa-arm-builder:20261008` | `sha256:ed20ced88326b460dde7e0f963d1589b78c438926fcecc37a5b4bd616dd8d9fd` | [`m4-gravity-mesa-arm-builder/`](m4-gravity-mesa-arm-builder/Dockerfile) | the `libevdi` library ([`display/evdi/`](../display/evdi/README.md)), cross-built for arm64 |
 | `m4-gravity-builder:fullmodules-20261009` | `sha256:d94f6e0226dffce095eba2e7a3b059399473c9bbb03b5210a1834d4ba8e68ca2` | [`m4-gravity-builder-fullmodules/`](m4-gravity-builder-fullmodules/Dockerfile) | the alpha.1 AVD module rebuilds |
+| `m4-audio-daemon-arm-builder` | `sha256:aca411d1df20ffd305e9d470b47e919afa47819e65f2654b757d93a15ddf5506` | [`m4-audio-daemon-arm-builder/`](m4-audio-daemon-arm-builder/Dockerfile) | the speaker daemon and the VA-API driver, cross-built for arm64 (see [Speaker daemon and VA-API driver](#speaker-daemon-and-va-api-driver)) |
 
 Notes on the recipes:
 - **`m4-gravity-builder:20261008`:** the base image's first layer
@@ -216,10 +217,8 @@ Notes:
   outputs: `m4-dev-builder:clang21` for `j713_dcp_backlight.ko`, and
   `m4-handoff-builder:amd64-rust93` for the stage2 loaders. Both outputs came
   out identical from `m4-gravity-builder`.
-- **Not rebuilt here:**
-  - the kernel `Image`, which no record claims byte-identical;
-  - the VA-API driver and the speaker daemon, MIT userspace whose joins are
-    `unverified`.
+- **Not rebuilt here:** the kernel `Image`, which no record claims
+  byte-identical.
 
 ### Mesa
 
@@ -257,6 +256,57 @@ The `/opt/m4-mesa` libgallium (`21cd0ce4…`) was not reproduced.
   in it.
 - Its source revision or patches are not recorded. Its join stays
   `unverified`.
+
+### Speaker daemon and VA-API driver
+
+Both are built in `m4-audio-daemon-arm-builder`
+(`sha256:aca411d1df20ffd305e9d470b47e919afa47819e65f2654b757d93a15ddf5506`).
+Its recipe, [`m4-audio-daemon-arm-builder/`](m4-audio-daemon-arm-builder/Dockerfile),
+is the Dockerfile retained in alpha.1's `j713-audio-reconstruction.tar`
+(`toolchain/daemon-arm64-builder.Dockerfile`), unchanged. It is
+`m4-gravity-mesa-arm-builder:20261008` plus `libstd-rust-dev:arm64`,
+`libasound2-dev:arm64` and `pkg-config`. It was rebuilt on 2026-11-10 on top of
+the rebuilt mesa-arm image, as `m4-audio-daemon-arm-builder:rebuilt`. Both
+builds ran with `--network none`.
+
+Each needs an arm64 sysroot. Neither sysroot is published, but both can be
+assembled from alpha.1's root image, which has the exact package versions:
+- **Speaker daemon (`/job/air-sysroot`).** The 588 members of
+  `sysroot-members.json` in `j713-audio-reconstruction.tar`, from glibc
+  `2.43+r22+g8362e8ce10b2-2`, alsa-lib `1.2.16.1-1` and gcc-libs
+  `16.1.1+r12+g301eb08fa2c5-1`. All 588 were read out of the alpha.1 root and
+  matched the manifest.
+- **VA-API driver (`/job/sysroot`).** The 1,626 entries of
+  `bridge-sysroot-content.jsonl.gz` in `build-inputs-final.tar.gz`. All but
+  three come from the alpha.1 root:
+  - `usr/lib/libgbm.so.1.0.0` is the Mesa rebuild's `libgbm` (`e83c2519…`);
+  - `usr/lib/pkgconfig/gbm.pc` is that build's `gbm.pc` with `/opt/m4-mesa`
+    replaced by `/usr`;
+  - `usr/include/xf86drm.h` is Ubuntu's `libdrm-dev:arm64`, as installed in
+    the image.
+
+  Every entry matched. Assemble this sysroot on a case-sensitive filesystem:
+  some kernel headers, such as `xt_CONNMARK.h` and `xt_connmark.h`, differ only
+  in case.
+
+| Output | SHA-256 | Built from |
+| --- | --- | --- |
+| `speakersafetyd-j713` | `3f5427f631507c71ae25679ea979dbac77eee4a716044c80826da4811f21036d` | `audio/j713/speakersafetyd` at `ee98743a`, the vendored crates of `j713-audio-cargo-sources.tar.gz`, and the `cargo rustc` command of `tools/build-j713-audio.sh` |
+| `v4l2_request_drv_video.so` | `76393532f322cb3bbf12899f3c75c1c5c24321f4518989f1ed58580f1324b9af` | `kit/source/video-package/corresponding-source/bridge` and `kit/source/bridge.cross` in `integration-inputs.tar.gz`, with the R4 bridge commands of `recipe/BUILD.md` |
+
+Both are byte-identical to the shipped files.
+
+- **Daemon crates.** The daemon embeds its crates' source paths. The vendored
+  crates must sit where the original build had its registry cache,
+  `/job/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/<crate>-<version>`,
+  configured as a directory source. With the crates at
+  `/job/source/vendor-registry`, as `BUILD-AUDIO-SOURCE.md` suggests, the
+  symbol suffixes change and the daemon comes out as `8709dbd7…`.
+- **The bridge archive.** The bridge's upstream tag archive
+  (sofus13/libva-v4l2_request 1.3, recorded as `3670a171…`) is not needed.
+  GitHub now serves it under another name and hash. It plus
+  `recipe/bridge-r4-complete.patch` gives the same 25 files as
+  `recipe/bridge-r4-source.json`.
 
 ## Images without a recipe
 

@@ -223,7 +223,29 @@ class SetupTests(unittest.TestCase):
         self.assertNotIn('[core]', system.refresh_config)
         keys = [c for c in system.commands if c[0] == 'pacman-key']
         self.assertEqual(keys[0][-2], '--add')
-        self.assertEqual(keys[1][-2:], ['--lsign-key', MODULE.FINGERPRINT])
+        self.assertEqual(keys[1][-2:], ['--lsign-key', MODULE.FINGERPRINTS[0]])
+        self.assertEqual(len(keys), 1 + len(MODULE.FINGERPRINTS))
+        self.assertEqual(result['trust_keys'], list(MODULE.FINGERPRINTS))
+
+    def test_every_trusted_key_is_locally_signed(self):
+        # A rotation's phase 1 ships the old and the new key (docs/package-channel.md).
+        old, new = 'A' * 40, 'B' * 40
+        system = FakeSystem(self.root)
+        with mock.patch.object(MODULE.subprocess, 'run', system):
+            result = MODULE.setup(self.root, True, fingerprints=(old, new), output=io.StringIO())
+        keys = [c for c in system.commands if c[0] == 'pacman-key']
+        self.assertEqual(keys[0][-2], '--add')
+        self.assertEqual([k[-2:] for k in keys[1:]], [['--lsign-key', old], ['--lsign-key', new]])
+        self.assertEqual(result['trust_keys'], [old, new])
+
+    def test_fingerprint_option_repeats(self):
+        old, new = 'A' * 40, 'B' * 40
+        with mock.patch.object(MODULE, 'setup', return_value={}) as setup, \
+             mock.patch('builtins.print'):
+            self.assertEqual(MODULE.main(['--root', str(self.root), '--fingerprint', old, '--fingerprint', new]), 0)
+            self.assertEqual(setup.call_args.args[4], (old, new))
+            MODULE.main(['--root', str(self.root)])
+            self.assertEqual(setup.call_args.args[4], MODULE.FINGERPRINTS)
 
     def test_repository_goes_first_and_once(self):
         self.setup_with(FakeSystem(self.root))
@@ -1391,13 +1413,13 @@ class SetupTests(unittest.TestCase):
         with mock.patch.object(MODULE.subprocess, 'run', system), \
              mock.patch.dict(MODULE.os.environ, {'SUDO_USER': 'owner'}):
             machine.pacman('-S', '--needed', '--noconfirm', *MODULE.PACKAGES)
-            machine.pacman_key('--lsign-key', MODULE.FINGERPRINT)
+            machine.pacman_key('--lsign-key', MODULE.FINGERPRINTS[0])
             machine.compose()
             machine.start_notifier()
         install, key, compose, timer = system.commands
         self.assertEqual(install, ['pacman', '--config', '/etc/pacman.conf', '-S', '--needed', '--noconfirm',
                                    *MODULE.PACKAGES])
-        self.assertEqual(key, ['pacman-key', '--config', '/etc/pacman.conf', '--lsign-key', MODULE.FINGERPRINT])
+        self.assertEqual(key, ['pacman-key', '--config', '/etc/pacman.conf', '--lsign-key', MODULE.FINGERPRINTS[0]])
         self.assertEqual(compose, ['/usr/bin/m4-boot-compose', '--apply'])
         self.assertEqual(timer, ['systemctl', '--user', '--machine', 'owner@.host', 'start',
                                  'omarchy-m4-update-check.timer'])
@@ -1405,7 +1427,8 @@ class SetupTests(unittest.TestCase):
     def test_channel_constants_match_the_repository(self):
         keyring = ROOT / 'packaging/omarchy-m4/omarchy-m4-keyring/omarchy-m4.gpg'
         self.assertEqual(MODULE.PUBLIC_KEY, keyring.read_text())
-        self.assertEqual(MODULE.FINGERPRINT, CHANNEL['signing_fingerprint'])
+        self.assertEqual(list(MODULE.FINGERPRINTS), CHANNEL['trusted_fingerprints'])
+        self.assertIn(CHANNEL['signing_fingerprint'], MODULE.FINGERPRINTS)
         self.assertEqual(MODULE.SERVER, CHANNEL['server'])
         self.assertEqual(MODULE.REPOSITORY, CHANNEL['repository'])
         self.assertEqual(list(MODULE.PACKAGES), CHANNEL['packages'])

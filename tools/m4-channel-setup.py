@@ -3,7 +3,7 @@
 # Copyright (c) 2026 KB2UKA
 """Connect an installed J713 alpha.1 Air to the signed M4 package channel.
 
-Trusts the channel's signing key, adds the [omarchy-m4] repository in front of
+Trusts the channel's keys, adds the [omarchy-m4] repository in front of
 the distribution repositories, then installs the channel packages from it.
 Only the channel's own database is refreshed, so this is not a general system
 update. An installed package newer than the channel copy is left alone;
@@ -27,7 +27,10 @@ import tempfile
 
 REPOSITORY = 'omarchy-m4'
 SERVER = 'https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages'
-FINGERPRINT = '578DF78177CF6DF29B888B8C9404F3CC90797A50'
+# The channel's trusted keys (channel.json trusted_fingerprints): one normally,
+# the old and the new key during a rotation (docs/package-channel.md). PUBLIC_KEY
+# is the keyring package's omarchy-m4.gpg; it may also hold revoked keys.
+FINGERPRINTS = ('578DF78177CF6DF29B888B8C9404F3CC90797A50',)
 PUBLIC_KEY = '''\
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 
@@ -533,19 +536,19 @@ def preflight(root, machine):
             'The alpha.1 kernel package linux-m4-omarchy is not installed')
 
 
-def setup(root, apply=False, server=SERVER, key=PUBLIC_KEY, fingerprint=FINGERPRINT, output=sys.stderr):
+def setup(root, apply=False, server=SERVER, key=PUBLIC_KEY, fingerprints=FINGERPRINTS, output=sys.stderr):
     if not apply:
-        return connect(root, False, server, key, fingerprint, output)
+        return connect(root, False, server, key, fingerprints, output)
     # One run at a time: the first-boot service, a pasted connect line and
     # omarchy-m4-update must not restore pacman.conf underneath each other.
     lock_path = root / LOCK
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with open(lock_path, 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        return connect(root, True, server, key, fingerprint, output)
+        return connect(root, True, server, key, fingerprints, output)
 
 
-def connect(root, apply, server, key, fingerprint, output):
+def connect(root, apply, server, key, fingerprints, output):
     machine = Machine(root, output)
     preflight(root, machine)
     packages = [p for p in PACKAGES if p != SINKS or not machine.installed('gst-plugins-good')]
@@ -554,7 +557,7 @@ def connect(root, apply, server, key, fingerprint, output):
     updated = with_include(text, include_line(root))
     wanted = snippet(server)
     current = (root / SNIPPET).read_text() if (root / SNIPPET).is_file() else None
-    plan = {'trust_key': fingerprint, 'snippet': str(root / SNIPPET), 'snippet_changes': current != wanted,
+    plan = {'trust_keys': list(fingerprints), 'snippet': str(root / SNIPPET), 'snippet_changes': current != wanted,
             'pacman_conf_changes': updated is not None, 'install': packages, 'applied': False}
     if not apply:
         plan['status'] = 'ready; rerun with --apply'
@@ -566,8 +569,9 @@ def connect(root, apply, server, key, fingerprint, output):
         key_file = scratch / 'omarchy-m4.asc'
         key_file.write_text(key)
         require(machine.pacman_key('--add', str(key_file)) == 0, 'pacman-key could not add the channel key')
-        require(machine.pacman_key('--lsign-key', fingerprint) == 0,
-                'pacman-key could not trust the channel key ' + fingerprint)
+        for fingerprint in fingerprints:
+            require(machine.pacman_key('--lsign-key', fingerprint) == 0,
+                    'pacman-key could not trust the channel key ' + fingerprint)
         make_keyring_readable(root)
         plan['keyring_readable'] = True
         try:
@@ -631,11 +635,11 @@ def main(argv=None):
     parser.add_argument('--root', type=Path, default=Path('/'), help=argparse.SUPPRESS)
     parser.add_argument('--server', default=SERVER, help=argparse.SUPPRESS)
     parser.add_argument('--key-file', type=Path, help=argparse.SUPPRESS)
-    parser.add_argument('--fingerprint', default=FINGERPRINT, help=argparse.SUPPRESS)
+    parser.add_argument('--fingerprint', action='append', dest='fingerprints', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     key = args.key_file.read_text() if args.key_file else PUBLIC_KEY
     try:
-        result = setup(args.root, args.apply, args.server, key, args.fingerprint)
+        result = setup(args.root, args.apply, args.server, key, tuple(args.fingerprints or FINGERPRINTS))
     except (Refused, OSError) as error:
         print('omarchy-m4-setup: refused: ' + str(error), file=sys.stderr)
         return 1

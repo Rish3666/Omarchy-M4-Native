@@ -6,7 +6,9 @@
 Runs only in the protected publishing job. The signing key arrives in
 PACKAGE_SIGNING_KEY and lives in a temporary keyring. A package file that is
 already published is never replaced: its published signature is verified and
-the published bytes stay in the database. New packages and signatures are
+the published bytes stay in the database. In phase 2 of a key rotation
+(docs/package-channel.md) a published signature by a revoked channel key is
+verified with that key and replaced by one from the signing key. New packages and signatures are
 uploaded first; the signed database is replaced last, and only when its
 package set changed. The corresponding integration source archive is packaged,
 signed, and uploaded alongside the channel assets. The result is then
@@ -31,6 +33,8 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 CHANNEL = json.loads((ROOT / 'packaging/omarchy-m4/channel.json').read_text())
 TAG, REPO, FPR = CHANNEL['release_tag'], CHANNEL['repository'], CHANNEL['signing_fingerprint']
+RETIRED = tuple(CHANNEL['revoked_fingerprints'])
+KEYRING = ROOT / 'packaging/omarchy-m4/omarchy-m4-keyring/omarchy-m4.gpg'
 SETUP = 'omarchy-m4-setup.py'
 CONNECT = 'm4-connect.sh'
 CONNECT_HASH = '@SETUP_SHA256@'
@@ -58,12 +62,22 @@ def release_exists():
     return subprocess.run(['gh', 'release', 'view', TAG], capture_output=True).returncode == 0
 
 
-def signed(signature, data_file):
-    """Return whether data_file has a good signature by the channel key, by fingerprint."""
+def signer(signature, data_file):
+    """Return the fingerprint of the one good signature on data_file, or None."""
     status = subprocess.run(['gpg', '--batch', '--status-fd', '1', '--verify', str(signature), str(data_file)],
                             capture_output=True, text=True)
     valid = [line.split()[2] for line in status.stdout.splitlines() if line.startswith('[GNUPG:] VALIDSIG ')]
-    return status.returncode == 0 and valid == [FPR]
+    return valid[0] if status.returncode == 0 and len(valid) == 1 else None
+
+
+def signed(signature, data_file):
+    """Return whether data_file has a good signature by the channel key, by fingerprint."""
+    return signer(signature, data_file) == FPR
+
+
+def retired_signature(signature, data_file):
+    """Return whether data_file has a good signature by a revoked channel key."""
+    return signer(signature, data_file) in RETIRED
 
 
 def verify(signature, data_file):
@@ -209,6 +223,9 @@ def publish(directory):
         secret = [line.split(':')[9] for line in output('gpg', '--list-secret-keys', '--with-colons').splitlines()
                   if line.startswith('fpr:')]
         require(secret[:1] == [FPR], 'The signing key is not the channel key ' + FPR)
+        require(FPR not in RETIRED, 'The signing key is revoked')
+        if RETIRED:  # public keys only, to verify what the revoked keys signed
+            run('gpg', '--batch', '--import', KEYRING)
         if not release_exists():
             run('gh', 'release', 'create', TAG, '--prerelease', '--target', 'main',
                 '--title', 'M4 package repository', '--notes', NOTES)
@@ -244,6 +261,12 @@ def publish(directory):
                 run('gh', 'release', 'download', TAG, '-D', repo, '-p', name)
                 if name + '.sig' in assets:
                     run('gh', 'release', 'download', TAG, '-D', repo, '-p', name + '.sig')
+                    if retired_signature(signature, repo / name):
+                        # Key rotation phase 2: same bytes, signature by the new key.
+                        sign(repo / name)
+                        run('gh', 'release', 'upload', TAG, '--clobber', signature)
+                        print('re-signed published ' + name)
+                        continue
                     verify(signature, repo / name)
                     print('kept published ' + name)
                     continue

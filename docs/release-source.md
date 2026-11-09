@@ -94,8 +94,32 @@ The package channel similarly requires every binary downloaded from the
 - `unverified`: the source is the likeliest published one, matched by file name
   only.
 
-Every GPL binary is `rebuilt-identical`; the 14 MIT userspace entries (Mesa,
-the VA-API driver, the speaker daemon) remain `unverified`.
+Every entry is `rebuilt-identical`: every GPL binary, and all 14 MIT
+userspace entries.
+
+The MIT entries were proven by rebuilds in images rebuilt from
+[`builders/`](../builders/README.md):
+- **Mesa (11 entries).** These came from a rebuild of `mesa.tar.gz` by the
+  recipe in `build-inputs-final.tar.gz`. They are the whole
+  `/opt/m4-video/20261011/mesa` set, and the five `/opt/m4-mesa` libraries that
+  are the same files.
+- **The `/opt/m4-mesa` libgallium (`21cd0ce4…`).** It is the earlier desktop
+  build, from GravityLinux/mesa `87ac51d411f0` with none of the three patches
+  ([issue #180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180)).
+  That tree is `mesa.tar.gz` with `recipe/mesa-complete.patch` reversed, file
+  for file. Built from it by the same recipe, without the patch, it came out
+  identical.
+- **The VA-API driver.** It was rebuilt from the bridge source and cross file
+  in `integration-inputs.tar.gz`.
+- **The speaker daemon.** It was rebuilt from `audio/j713/speakersafetyd` at the
+  v0.1.0-alpha.1 tag, with the vendored crates of
+  `j713-audio-cargo-sources.tar.gz`. The tree changed after the tag, so the
+  daemon joins `j713-audio-speakersafetyd-ee98743a.tar.gz` (`342ad26a…`). That
+  archive is made the same way as the kernel modules' archive:
+  `git archive --format=tar ee98743a audio/j713/speakersafetyd | gzip -n -9`.
+
+`mesa.tar.gz` is GravityLinux/mesa at `87ac51d411f0` plus
+`recipe/mesa-complete.patch`, file for file.
 
 - **GPU modules:** the published `kernel-controller.tar.gz` with the four Air
   GPU files from `omarchy-j713-v0.1.0-alpha.1-gpu-air-source.tar.gz` reproduces
@@ -121,7 +145,11 @@ the VA-API driver, the speaker daemon) remain `unverified`.
   the difference.
 
 All nine were rebuilt on 2026-10-14 with read-only kernel trees and the
-recorded builder images (clang 21.1.8).
+recorded builder images (clang 21.1.8). The recipes for those images, and the
+images' package versions, are in [`builders/`](../builders/README.md). The
+README also records the rebuild of all four images from those recipes. The
+rebuilt images reproduced 27 distinct recorded outputs byte for byte,
+including all nine binaries above.
 
 `tools/prepare-j713-release.py` scans the finished root and refuses to assemble
 a release in any of these cases:
@@ -133,8 +161,9 @@ a release in any of these cases:
 - a commit-pinned tree differs in the revision being assembled.
 
 It also refuses `unverified` entries, unless `--allow-unverified-source` is
-given to reassemble alpha.1 itself. `IMAGE.json` then lists those entries in
-`source_correspondence_unverified`. Archives that are not part of the retained
+given; `IMAGE.json` then lists those entries in
+`source_correspondence_unverified`. No entry is `unverified` now, so alpha.1
+itself no longer needs the option. Archives that are not part of the retained
 delivery, like the GPU packet, are supplied with `--join-source`.
 
 ## Kernel and audio build joins
@@ -261,7 +290,8 @@ table is supplied as `reference-sound-exports.symvers`.
 The historical ARM64 sysroot came from glibc `2.43+r22+g8362e8ce10b2-2`, alsa-lib
 `1.2.16.1-1` and gcc-libs `16.1.1+r12+g301eb08fa2c5-1`. Historical toolchains used
 Rust/Cargo 1.93.1, LLVM/Clang 21.1.8 and GCC 15.2.0. Reconstruct those external
-toolchain/sysroot inputs using the retained recipes and package versions; local
+toolchain/sysroot inputs using the retained recipes and package versions (the
+builder images' recipes are in [`builders/`](../builders/README.md)); local
 Docker image hashes alone are not public download locations. This source packet
 does not claim a fully self-contained or byte-identical clean rebuild. The
 historical filter-generation pipeline passed on native ARM64 macOS 26.5.1

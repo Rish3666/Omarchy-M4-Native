@@ -4,6 +4,10 @@
   "release_tag": "packages",
   "server": "https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/packages",
   "signing_fingerprint": "578DF78177CF6DF29B888B8C9404F3CC90797A50",
+  "trusted_fingerprints": [
+    "578DF78177CF6DF29B888B8C9404F3CC90797A50"
+  ],
+  "revoked_fingerprints": [],
   "packages": [
     "omarchy-m4-keyring",
     "omarchy-m4-boot",

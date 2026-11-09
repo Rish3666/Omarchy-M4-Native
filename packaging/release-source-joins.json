@@ -26,68 +26,98 @@
     "opt/m4-mesa/lib/gbm/dri_gbm.so": {
       "sha256": "5408ea008e52c98f5c111d637236e5ba52f07c20020fe188bb496c11ba430956",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
     },
     "opt/m4-mesa/lib/libEGL.so.1.0.0": {
       "sha256": "f9f3247a5b0b425c15f29cf0773092e95c691e347594cd0b32278f303dc2ab05",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
     },
     "opt/m4-mesa/lib/libGLESv1_CM.so.1.1.0": {
       "sha256": "7edfe3b254d802ae26aeebd3572875262dcb32888515fc7e53efb290d3e6d789",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
     },
     "opt/m4-mesa/lib/libGLESv2.so.2.0.0": {
       "sha256": "b5fed2f5b970db1ee93145afca9159eab484680e6f230d59c1340f066c59095a",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
     },
     "opt/m4-mesa/lib/libgallium-26.3.0-devel.so": {
       "sha256": "21cd0ce471406590ef931db75ba17d90f4c1c895ecf4bca4cec20ae6a834b88c",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "The earlier, unpatched desktop build (issue 180): GravityLinux/mesa 87ac51d411f0 with none of the three patches, which is mesa.tar.gz with recipe/mesa-complete.patch of build-inputs-final.tar.gz reversed, file for file. Rebuilt 2026-11-10 from a clean git checkout of that commit by the recipe in recipe/BUILD.md, without the patch and without MESA_GIT_SHA1_OVERRIDE (the version comes from git), host tools from /mesa and the aarch64 cross build with recipe/mesa-arm.cross from /build/mesa, in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. It came out byte for byte; see builders/README.md."
     },
     "opt/m4-mesa/lib/libgbm.so.1.0.0": {
       "sha256": "e83c251960678b8707d9afbe8b4ca9747fc146166291bdcf651d77555859a46a",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
     },
     "opt/m4-video/20261011/kernel/apple-avd.ko": {
       "sha256": "89ff8a98cd971392e1ec9d8b6c2b74ff09669e0c681ef35eee4d447aabad9fba",
@@ -122,82 +152,114 @@
     "opt/m4-video/20261011/mesa/lib/gbm/dri_gbm.so": {
       "sha256": "5408ea008e52c98f5c111d637236e5ba52f07c20020fe188bb496c11ba430956",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
           "archive": "source/mesa.tar.gz",
           "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/mesa/lib/libEGL.so.1.0.0": {
-      "sha256": "f9f3247a5b0b425c15f29cf0773092e95c691e347594cd0b32278f303dc2ab05",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/mesa.tar.gz",
-          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/mesa/lib/libGLESv1_CM.so.1.1.0": {
-      "sha256": "7edfe3b254d802ae26aeebd3572875262dcb32888515fc7e53efb290d3e6d789",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/mesa.tar.gz",
-          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/mesa/lib/libGLESv2.so.2.0.0": {
-      "sha256": "b5fed2f5b970db1ee93145afca9159eab484680e6f230d59c1340f066c59095a",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/mesa.tar.gz",
-          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/mesa/lib/libgallium-26.3.0-devel.so": {
-      "sha256": "ce3ec9f55cea61d37d7ecfddf742fe2667773afc15a2e77d411c4d1f81800664",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/mesa.tar.gz",
-          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/mesa/lib/libgbm.so.1.0.0": {
-      "sha256": "e83c251960678b8707d9afbe8b4ca9747fc146166291bdcf651d77555859a46a",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/mesa.tar.gz",
-          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
-        }
-      ]
-    },
-    "opt/m4-video/20261011/vaapi/v4l2_request_drv_video.so": {
-      "sha256": "76393532f322cb3bbf12899f3c75c1c5c24321f4518989f1ed58580f1324b9af",
-      "license": "MIT",
-      "correspondence": "unverified",
-      "sources": [
-        {
-          "archive": "source/integration-inputs.tar.gz"
         },
         {
           "archive": "source/build-inputs-final.tar.gz",
           "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/mesa/lib/libEGL.so.1.0.0": {
+      "sha256": "f9f3247a5b0b425c15f29cf0773092e95c691e347594cd0b32278f303dc2ab05",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/mesa.tar.gz",
+          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/mesa/lib/libGLESv1_CM.so.1.1.0": {
+      "sha256": "7edfe3b254d802ae26aeebd3572875262dcb32888515fc7e53efb290d3e6d789",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/mesa.tar.gz",
+          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/mesa/lib/libGLESv2.so.2.0.0": {
+      "sha256": "b5fed2f5b970db1ee93145afca9159eab484680e6f230d59c1340f066c59095a",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/mesa.tar.gz",
+          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/mesa/lib/libgallium-26.3.0-devel.so": {
+      "sha256": "ce3ec9f55cea61d37d7ecfddf742fe2667773afc15a2e77d411c4d1f81800664",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/mesa.tar.gz",
+          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/mesa/lib/libgbm.so.1.0.0": {
+      "sha256": "e83c251960678b8707d9afbe8b4ca9747fc146166291bdcf651d77555859a46a",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/mesa.tar.gz",
+          "sha256": "75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 by the recipe in recipe/BUILD.md of build-inputs-final.tar.gz (host tools, then the aarch64 cross build with recipe/mesa-arm.cross and MESA_GIT_SHA1_OVERRIDE=87ac51d411, under /build) in m4-gravity-mesa-arm-builder:20261008 rebuilt from builders/ (214e94f0), with --network none. mesa.tar.gz equals GravityLinux/mesa 87ac51d411f0 plus recipe/mesa-complete.patch file for file. libgallium, libEGL, libGLESv1_CM, libGLESv2, libgbm and dri_gbm came out byte for byte; see builders/README.md."
+    },
+    "opt/m4-video/20261011/vaapi/v4l2_request_drv_video.so": {
+      "sha256": "76393532f322cb3bbf12899f3c75c1c5c24321f4518989f1ed58580f1324b9af",
+      "license": "MIT",
+      "correspondence": "rebuilt-identical",
+      "sources": [
+        {
+          "archive": "source/integration-inputs.tar.gz",
+          "sha256": "0959e4cc813cafd32e276fe1cb4f92599fa284ec35a414c0fece598c0a8280df"
+        },
+        {
+          "archive": "source/build-inputs-final.tar.gz",
+          "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
+        }
+      ],
+      "evidence": "Rebuilt 2026-11-10 from kit/source/video-package/corresponding-source/bridge and kit/source/bridge.cross in integration-inputs.tar.gz, by recipe/BUILD.md (R4 bridge) of build-inputs-final.tar.gz, in m4-audio-daemon-arm-builder rebuilt from builders/, with --network none. The sysroot at /job/sysroot was assembled to match bridge-sysroot-content.jsonl.gz entry for entry (1,626): files from the alpha.1 root, libgbm and gbm.pc from the Mesa rebuild (gbm.pc with /opt/m4-mesa as /usr) and xf86drm.h from Ubuntu libdrm-dev:arm64. Byte for byte; see builders/README.md."
     },
     "usr/lib/omarchy/j713-audio/7.1.9-m4-gpu-backport-20261008/modules/apple-admac.ko": {
       "sha256": "cd57f99657e6232e45d58645949a0f73b656372d92e272828c14bcd4e63ea110",
@@ -335,16 +397,18 @@
     "usr/lib/speakersafetyd-j713": {
       "sha256": "3f5427f631507c71ae25679ea979dbac77eee4a716044c80826da4811f21036d",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
-          "tree": "audio/j713/speakersafetyd"
+          "archive": "source/j713-audio-speakersafetyd-ee98743a.tar.gz",
+          "sha256": "342ad26aa32ff93cc25d3bc88db0eaae8ebaba8962907a034103d7120c023ded"
         },
         {
           "archive": "source/j713-audio-cargo-sources.tar.gz",
           "sha256": "faf50f21db4b622900bd275441bc321d1a01933afb555e84d1446d38d6027a34"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 from audio/j713/speakersafetyd at the v0.1.0-alpha.1 tag (ee98743a; the tree changed after it), archived with git archive --format=tar ee98743a audio/j713/speakersafetyd | gzip -n -9, and the vendored crates of j713-audio-cargo-sources.tar.gz placed at /job/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f as a directory source. Built with the cargo command of tools/build-j713-audio.sh in m4-audio-daemon-arm-builder rebuilt from builders/, with --network none, against the 588-member sysroot of sysroot-members.json taken from the alpha.1 root. Byte for byte; see builders/README.md."
     },
     "var/lib/omarchy-m4/gpu-module/alpha1-module.ko": {
       "sha256": "80cf3669575edd09aed226a93e47aaaf132e70f1070154629c413c0b40d34578",

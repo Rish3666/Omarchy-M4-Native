@@ -179,6 +179,47 @@ def check_stale_joins(channel, joins):
             'Source joins for binaries the channel no longer ships: ' + ', '.join(sorted(stale)))
 
 
+def check_signing_keys(channel):
+    """The channel's key lists: one signing key, trusted, and no key both trusted and revoked.
+
+    A rotation (docs/package-channel.md) moves through three states: normal
+    (trusted = [signing]), phase 1 (trusted = [old, new], still signed by old) and
+    phase 2 (trusted = [new], revoked = [old], signed by new).
+    """
+    signing, trusted, revoked = (channel['signing_fingerprint'], channel['trusted_fingerprints'],
+                                 channel['revoked_fingerprints'])
+    for fingerprint in [signing, *trusted, *revoked]:
+        require(isinstance(fingerprint, str) and len(fingerprint) == 40 and
+                all(c in '0123456789ABCDEF' for c in fingerprint),
+                'Not a full upper-case fingerprint: ' + repr(fingerprint))
+    require(len(set(trusted)) == len(trusted) and len(set(revoked)) == len(revoked), 'Duplicate fingerprint')
+    require(signing in trusted, 'The signing key is not trusted')
+    require(not set(trusted) & set(revoked), 'A key is both trusted and revoked')
+
+
+def keyring_fingerprints(path):
+    listing = subprocess.run(['gpg', '--show-keys', '--with-colons', str(path)],
+                             check=True, capture_output=True, text=True).stdout
+    return [line.split(':')[9] for line in listing.splitlines() if line.startswith('fpr:')]
+
+
+def check_keyring(channel, keyrings):
+    """The keyring package holds exactly the channel's trusted and revoked keys.
+
+    The revoked keys stay in omarchy-m4.gpg so that pacman-key --populate can
+    disable them, and so that publishing can verify what they signed.
+    """
+    check_signing_keys(channel)
+    trusted, revoked = channel['trusted_fingerprints'], channel['revoked_fingerprints']
+    held = keyring_fingerprints(keyrings / 'omarchy-m4.gpg')
+    require(channel['signing_fingerprint'] in held, 'Keyring does not hold the channel signing key')
+    require(sorted(held) == sorted(trusted + revoked), 'Keyring holds an unexpected set of keys')
+    require((keyrings / 'omarchy-m4-trusted').read_text() == ''.join(f + ':4:\n' for f in trusted),
+            'Keyring trusts an unexpected key')
+    require((keyrings / 'omarchy-m4-revoked').read_text() == ''.join(f + '\n' for f in revoked),
+            'Keyring revokes an unexpected key')
+
+
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -405,13 +446,7 @@ def check_package(channel, package, info, files, root, joins=None):
         require(sorted(info.get('depend', [])) == ['gst-plugins-base-libs>=1.28.7', 'gstreamer>=1.28.7', 'libpulse'],
                 'GStreamer sink package dependencies changed')
     elif name == 'omarchy-m4-keyring':
-        listing = subprocess.run(['gpg', '--show-keys', '--with-colons',
-                                  str(root / 'usr/share/pacman/keyrings/omarchy-m4.gpg')],
-                                 check=True, capture_output=True, text=True).stdout
-        fingerprints = [line.split(':')[9] for line in listing.splitlines() if line.startswith('fpr:')]
-        require(fingerprints[:1] == [channel['signing_fingerprint']], 'Keyring does not hold the channel signing key')
-        trusted = (root / 'usr/share/pacman/keyrings/omarchy-m4-trusted').read_text()
-        require(trusted == channel['signing_fingerprint'] + ':4:\n', 'Keyring trusts an unexpected key')
+        check_keyring(channel, root / 'usr/share/pacman/keyrings')
     return name
 
 
@@ -432,6 +467,7 @@ def published(channel, filename, scratch):
 
 def check(directory, compare_published=True):
     channel = json.loads(CHANNEL.read_text())
+    check_signing_keys(channel)
     joins = source_joins()
     check_stale_joins(channel, joins)
     check_kit_joins(joins)

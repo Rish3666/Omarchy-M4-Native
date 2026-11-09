@@ -662,9 +662,10 @@ knows only the old key refuses a database signed by both.
      `omarchy-m4-revoked` stays empty. Its `post_upgrade` runs
      `pacman-key --populate omarchy-m4`, which adds and locally signs the new
      key.
-   - Ship `tools/m4-channel-setup.py` with both public keys and both
-     fingerprints. This needs a new `omarchy-m4-boot`, which carries the script.
-     Kits built from then on connect machines that already trust both keys.
+   - Ship `tools/m4-channel-setup.py` with both public keys (`PUBLIC_KEY`,
+     the keyring's `omarchy-m4.gpg`) and both fingerprints (`FINGERPRINTS`).
+     This needs a new `omarchy-m4-boot`, which carries the script. Kits built
+     from then on connect machines that already trust both keys.
    - The publishing job keeps signing with the old key.
 3. **Wait.** Leave phase 1 published long enough for machines to update. The
    channel has no way to count them. Any machine that has not installed the
@@ -678,7 +679,10 @@ knows only the old key refuses a database signed by both.
    - Publish a keyring version that trusts only the new key and lists the old
      one in `omarchy-m4-revoked`, signed by the new key. Its populate step
      disables the old key.
-   - Remove the old key from `tools/m4-channel-setup.py`.
+   - Leave only the new fingerprint in `FINGERPRINTS` in
+     `tools/m4-channel-setup.py`. Its `PUBLIC_KEY` stays equal to the keyring's
+     `omarchy-m4.gpg`, which still holds the old key. The script adds that key
+     but does not sign it locally, so pacman does not trust it.
 5. **Machines that missed phase 1.** They know only the old key, so they
    refuse the phase 2 channel with `key ... is unknown`. Recover such a machine
    by hand: add the new public key and locally sign it, after checking its
@@ -690,14 +694,36 @@ knows only the old key refuses a database signed by both.
    sudo pacman-key --lsign-key <new fingerprint>
    ```
 
-The tools assume a single key today, so both phases need code changes first:
-- `tools/check-m4-packages.py` accepts a keyring that holds and trusts exactly
-  the channel key. It has to accept the phase 1 and phase 2 keyrings.
-- `tools/publish-m4-packages.py` keeps every published package with its
-  original signature, verified against `signing_fingerprint`. In phase 2 it
-  has to verify the old signature with the old key, and then replace it with
-  one from the new key.
-- `tools/m4-channel-setup.py` holds one public key and one fingerprint.
+Three lists in `channel.json` describe each state. `OLD` and `NEW` stand for
+the two fingerprints:
+
+| State | `signing_fingerprint` | `trusted_fingerprints` | `revoked_fingerprints` |
+| --- | --- | --- | --- |
+| Normal | `OLD` | `[OLD]` | `[]` |
+| Phase 1 | `OLD` | `[OLD, NEW]` | `[]` |
+| Phase 2 | `NEW` | `[NEW]` | `[OLD]` |
+
+The tools follow these lists:
+- `tools/check-m4-packages.py` refuses any other combination: the signing key
+  must be trusted, and no key may be both trusted and revoked. It also checks
+  that the keyring package matches the lists exactly:
+  - `omarchy-m4.gpg` holds the trusted and the revoked keys;
+  - `omarchy-m4-trusted` lists the trusted keys, in order;
+  - `omarchy-m4-revoked` lists the revoked keys.
+- `tools/publish-m4-packages.py` signs with `signing_fingerprint` only, and
+  refuses to publish when that key is revoked. A published package keeps its
+  bytes. It is re-signed only in phase 2, when its published signature is by a
+  revoked key. That signature is verified with the revoked key, from the
+  keyring's `omarchy-m4.gpg`, and then replaced by one from the new key. A
+  signature by any other key still stops publishing. The databases are signed
+  again, because their published signatures no longer verify against
+  `signing_fingerprint`. The verification also works if `omarchy-m4.gpg`
+  carries the old key's revocation certificate. gpg then still reports one
+  good signature by the old key, flagged as revoked, and
+  `tests/test_m4_signing_keys.py` checks this with real gpg.
+- `tools/m4-channel-setup.py` signs every key in `FINGERPRINTS` locally. The
+  tests require `FINGERPRINTS` to equal `trusted_fingerprints`, and
+  `PUBLIC_KEY` to equal the keyring's `omarchy-m4.gpg`.
 
 The sequence was rehearsed with throwaway keys under pacman 7.1.0 and gnupg
 2.4.9, on Omarchy aarch64. The rehearsal scripts are

@@ -1,6 +1,6 @@
 [Unit]
 Description=Check the M4 package channel for updates
-Documentation=https://github.com/Kb2uka/Omarchy-M4-Native/blob/main/docs/updates.md
+Documentation=https://github.com/kazuhidet/Omarchy-M4-Native/blob/main/docs/updates.md
 
 [Service]
 Type=oneshot

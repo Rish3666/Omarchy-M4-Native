@@ -7,7 +7,7 @@
   firmware starts the Air again. Connecting to M4 updates (UPDATES.md) applies
   the fix in place, with no reinstall, as does the standalone update 1 verified
   on the maintainer's Air:
-  https://github.com/Kb2uka/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.1
+  https://github.com/kazuhidet/Omarchy-M4-Native/releases/tag/v0.1.0-alpha.1-update.1
   (issue #24). Without it, only holding the power button keeps the Air off, and
   a long press can still end in a restart depending on its timing.
 - **Replacement first boot still needs qualification.** The October 12 candidate
@@ -56,7 +56,7 @@
   silent, reboot; restarting it in the same session does not work. If the
   reboot leaves only "Dummy Output", run
   `pactl set-card-profile alsa_card.platform-sound HiFi`
-  ([recovery](https://github.com/Kb2uka/Omarchy-M4-Native/blob/main/docs/j713-protection-startup.md#recovery)).
+  ([recovery](https://github.com/kazuhidet/Omarchy-M4-Native/blob/main/docs/j713-protection-startup.md#recovery)).
 - **M4 updates need one connect step.** Read UPDATES.md. After it, M4 kernel
   and boot fixes arrive as signed packages through `omarchy update`. Ordinary
   rolling Arch Linux ARM and Omarchy updates remain unqualified on this hardware.

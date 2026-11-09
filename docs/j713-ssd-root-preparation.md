@@ -47,7 +47,7 @@ Recovery from this partial state currently requires maintainer assistance:
 4. Contact the maintainer who supplied the experimental installer, using the
    same channel, to arrange sharing the log and disk information and preparing
    a continuation for that exact layout. Repository collaborators can also use
-   the [issue tracker](https://github.com/Kb2uka/Omarchy-M4-Native/issues); the
+   the [issue tracker](https://github.com/kazuhidet/Omarchy-M4-Native/issues); the
    repository is currently private. If ownership or installation progress is uncertain,
    stop. These notes do not authorize deleting partitions or overwriting a root
    image that may already contain an installation.

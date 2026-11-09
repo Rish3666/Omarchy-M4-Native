@@ -14,7 +14,7 @@ Protection fails closed by design and does not restart (see
 [readiness](j713-audio-readiness.md)), so audio stays off until a reboot. The
 same daemon can also panic later in a session, while something is playing,
 with `J713 stale capture backlog/read`
-([#64](https://github.com/Kb2uka/Omarchy-M4-Native/issues/64)); the cause of
+([#64](https://github.com/kazuhidet/Omarchy-M4-Native/issues/64)); the cause of
 that panic is still open. The recovery below covers both.
 
 ## Recovery

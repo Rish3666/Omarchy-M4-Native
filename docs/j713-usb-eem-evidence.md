@@ -147,4 +147,4 @@ prove absence of a DMA problem, and the last line received over USB does not
 prove the CPU stopped there. As of this recorded status, no explicit media-read probe, working keyboard/trackpad,
 accelerated desktop, audio or installed Omarchy are established by this record.
 
-Later storage-read results are recorded separately in [a draft power-domain record at b73349f](https://github.com/Kb2uka/Omarchy-M4-Native/blob/b73349f3478522b45cd916bde42c5cc19d663bcb/docs/j713-nvme-power-domain.md). Track revisions and review status in [PR #6](https://github.com/Kb2uka/Omarchy-M4-Native/pull/6).
+Later storage-read results are recorded separately in [a draft power-domain record at b73349f](https://github.com/kazuhidet/Omarchy-M4-Native/blob/b73349f3478522b45cd916bde42c5cc19d663bcb/docs/j713-nvme-power-domain.md). Track revisions and review status in [PR #6](https://github.com/kazuhidet/Omarchy-M4-Native/pull/6).

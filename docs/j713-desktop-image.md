@@ -109,7 +109,7 @@ and personal settings retain their normal loading order.
 ### Lid close and the lock screen
 
 The same block binds the lid
-([issue #84](https://github.com/Kb2uka/Omarchy-M4-Native/issues/84)). Closing
+([issue #84](https://github.com/kazuhidet/Omarchy-M4-Native/issues/84)). Closing
 the lid locks the session and opening it lights the lock screen, as Omarchy does
 on a laptop whose logind ignores the lid. Without this change the lid does
 nothing on J713:
@@ -124,7 +124,7 @@ nothing on J713:
   treats any connector not named `eDP`, `LVDS` or `DSI` as external, and the
   J713 panel is the simpledrm connector `Unknown-1`, so it always succeeds. The
   binds leave the check out. External displays do not work on J713 yet
-  ([#58](https://github.com/Kb2uka/Omarchy-M4-Native/issues/58)); once they do,
+  ([#58](https://github.com/kazuhidet/Omarchy-M4-Native/issues/58)); once they do,
   closing the lid will still lock.
 - The lock screen itself refused to lock (`omarchy-shell lock lock` answered
   `missing-pam`). Omarchy's installer runs `omarchy-apply-lock` to write

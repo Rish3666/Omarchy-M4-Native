@@ -1,6 +1,6 @@
 # J713 P-core boost to 4464 MHz with a predictive guard
 
-Issue [#66](https://github.com/Kb2uka/Omarchy-M4-Native/issues/66) asks for
+Issue [#66](https://github.com/kazuhidet/Omarchy-M4-Native/issues/66) asks for
 macOS-like CPU behaviour on the fanless Air: short bursts at the top clock,
 cool the rest of the time. CPU idle, E cores to 2172 MHz and a CPU die thermal
 zone came first ([`docs/j713-cpu-idle.md`](j713-cpu-idle.md)). This change

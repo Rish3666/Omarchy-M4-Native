@@ -90,7 +90,7 @@ calibration from the live ADT. The captured FDT contained 5,888 Wi-Fi
 calibration bytes and two 16,652-byte Bluetooth calibration blobs. Do not
 ship the placeholder addresses or substitute another board's calibration.
 The diagnostic used a fresh live TrustCache reservation for each boot; see
-[the SMP fix](https://github.com/Kb2uka/Omarchy-M4-Native/pull/7).
+[the SMP fix](https://github.com/kazuhidet/Omarchy-M4-Native/pull/7).
 
 ## Driver and firmware
 

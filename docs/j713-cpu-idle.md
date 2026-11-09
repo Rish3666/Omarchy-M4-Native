@@ -1,9 +1,9 @@
 # J713 CPU idle, E-cluster clocks and a CPU thermal zone
 
-Issue [#66](https://github.com/Kb2uka/Omarchy-M4-Native/issues/66) asks for
+Issue [#66](https://github.com/kazuhidet/Omarchy-M4-Native/issues/66) asks for
 macOS-like CPU behaviour on the fanless Air: short bursts at high clocks, cool
 the rest of the time. Its first step is CPU idle
-([#65](https://github.com/Kb2uka/Omarchy-M4-Native/issues/65)). This change
+([#65](https://github.com/kazuhidet/Omarchy-M4-Native/issues/65)). This change
 delivers that step, raises the E-cluster clocks, and adds a CPU die thermal zone
 as a safety net. P-core boost above 1800 MHz is the next step:
 [J713 P-core boost](j713-cpu-boost.md).
@@ -70,7 +70,7 @@ one-strike rule:
   running session. A clean stop during the settle period is not a death: a
   service restart or shutdown sends SIGTERM, the loader clears the marker as it
   stops, and the next boot tries again
-  ([#130](https://github.com/Kb2uka/Omarchy-M4-Native/issues/130)). A stop
+  ([#130](https://github.com/kazuhidet/Omarchy-M4-Native/issues/130)). A stop
   while a module load is still pending still leaves the marker, because that
   load's outcome is unknowable.
 - At boot, a leftover marker can earn one automatic retry if the journal

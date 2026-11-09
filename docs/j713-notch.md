@@ -2,7 +2,7 @@
 
 The J713 panel is 2560x1664. The camera sits in a cutout at the top centre, and
 by default the desktop uses only the 2560x1600 below it, so nothing is drawn
-behind the camera ([issue #89](https://github.com/Kb2uka/Omarchy-M4-Native/issues/89)).
+behind the camera ([issue #89](https://github.com/kazuhidet/Omarchy-M4-Native/issues/89)).
 An owner can opt in to the whole panel, as on macOS: the desktop gains the
 64 rows beside the cutout, fullscreen video reaches the top edge, and the
 Omarchy bar moves its center widgets to the left and right of the camera.

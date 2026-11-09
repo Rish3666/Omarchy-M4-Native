@@ -56,9 +56,9 @@ From installer update 4 the root image runs the Air GPU module that
 `omarchy-m4-gpu` 1-3 ships,
 `de0337a773930c7862a99706112dd71eaaecf2021707da248fd3d07feefdc824`, in place
 of alpha.1's `80cf3669…`. It accepts each Air's own GPU power limit up to
-24800 mW ([#57](https://github.com/Kb2uka/Omarchy-M4-Native/issues/57)) and the
+24800 mW ([#57](https://github.com/kazuhidet/Omarchy-M4-Native/issues/57)) and the
 base-model Air's eight-core GPU
-([#118](https://github.com/Kb2uka/Omarchy-M4-Native/pull/118)), so a fresh
+([#118](https://github.com/kazuhidet/Omarchy-M4-Native/pull/118)), so a fresh
 install reaches the desktop on every 13-inch M4 Air without first connecting to
 M4 updates. Its source is `gpu/j713` in `release-integration.tar.gz` with
 `kernel-controller.tar.gz` and the GPU source packet, built by
@@ -100,7 +100,7 @@ the VA-API driver, the speaker daemon) remain `unverified`.
 - **GPU modules:** the published `kernel-controller.tar.gz` with the four Air
   GPU files from `omarchy-j713-v0.1.0-alpha.1-gpu-air-source.tar.gz` reproduces
   alpha.1's module byte for byte
-  ([issue 77](https://github.com/Kb2uka/Omarchy-M4-Native/issues/77)), now kept
+  ([issue 77](https://github.com/kazuhidet/Omarchy-M4-Native/issues/77)), now kept
   at `/var/lib/omarchy-m4/gpu-module/alpha1-module.ko` for rollback. That packet
   is attached to the v0.1.0-alpha.1 release; alpha.1's source packet originally
   omitted those four files. The same tree with `g16.rs` from `gpu/j713` at

@@ -5,7 +5,7 @@ new installations until display diagnosis and a validated replacement kit.
 The procedure below is retained for investigation; a desktop boot is unverified.
 
 This build is for testers of the **plain M4 Mac mini (2024), Mac16,10 / J773g /
-T8132** ([#136](https://github.com/Kb2uka/Omarchy-M4-Native/issues/136)). It
+T8132** ([#136](https://github.com/kazuhidet/Omarchy-M4-Native/issues/136)). It
 is not for the M4 Pro mini or any other Mac. It is not endorsed by Omarchy,
 Asahi, Gravity or Apple.
 
@@ -35,7 +35,7 @@ stays installed and selectable at startup.
 In Terminal:
 
 ```sh
-curl -fLO https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-j773g-test.1/download-j713.command
+curl -fLO https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-j773g-test.1/download-j713.command
 bash download-j713.command
 ```
 

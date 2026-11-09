@@ -32,8 +32,8 @@ The patch applies to kernel base
 `77cb8f24c2381a8abb7272d7bbdec548d6426a8a`. The hardware-tested kernel also
 contains the existing J713 bring-up and boot diagnostics. This patch alone
 does not supply the board DTS, MTP reset pins, firmware, or boot dependencies.
-See the [MTP reset pins](https://github.com/Kb2uka/Omarchy-M4-Native/pull/2)
-and [live TrustCache reservation](https://github.com/Kb2uka/Omarchy-M4-Native/pull/7).
+See the [MTP reset pins](https://github.com/kazuhidet/Omarchy-M4-Native/pull/2)
+and [live TrustCache reservation](https://github.com/kazuhidet/Omarchy-M4-Native/pull/7).
 
 ## Firmware provenance
 

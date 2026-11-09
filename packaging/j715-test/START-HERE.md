@@ -1,7 +1,7 @@
 # 15-inch M4 MacBook Air tester build (v0.1.0-alpha.1-j715-test.1)
 
 This build is for testers of the **15-inch M4 MacBook Air (2025), Mac16,13 /
-J715 / T8132** ([#142](https://github.com/Kb2uka/Omarchy-M4-Native/issues/142)).
+J715 / T8132** ([#142](https://github.com/kazuhidet/Omarchy-M4-Native/issues/142)).
 It is not for the 13-inch Air or any other Mac. It is not endorsed by Omarchy,
 Asahi, Gravity or Apple.
 
@@ -36,7 +36,7 @@ stays installed and selectable at startup.
 In Terminal:
 
 ```sh
-curl -fLO https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-j715-test.1/download-j713.command
+curl -fLO https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1-j715-test.1/download-j713.command
 bash download-j713.command
 ```
 

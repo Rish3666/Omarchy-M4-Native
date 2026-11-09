@@ -1,6 +1,6 @@
 # J713 #82: stage 1 freezes at the ANS reset
 
-[Issue #82](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82): two
+[Issue #82](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82): two
 13-inch M4 Airs stop on the m1n1 logo at every boot. Both run system firmware
 `mBoot-18000.161.10`. Two other M4 Airs (the owner's and the #57 reporter's)
 boot the same loaders. The first theory,
@@ -137,11 +137,11 @@ A second Air with the same freeze (Mac16,12, `mBoot-18000.161.10`, a stock
 update 2 install) ran the loaders in order on 2026-10-15:
 
 - **`v2` booted** to Linux
-  ([report](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82#issuecomment-6195132271)).
+  ([report](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82#issuecomment-6195132271)).
   The 29-byte print still lands in the window, with no reset after it. A
   predicted a freeze, B a boot, so B is supported.
 - **`v1` booted** unattended to the desktop
-  ([report](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82#issuecomment-6204117990)).
+  ([report](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82#issuecomment-6204117990)).
   `asahi,m1n1-stage1-version` read `-i82v1`, NVMe came up and root mounted.
   The kernel log showed only RTKit `PANICLOG not yet written` syslog lines and
   macsmc-reboot `Missing NVMEM cell` lines.

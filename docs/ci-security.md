@@ -1,6 +1,6 @@
 # Public contribution checks
 
-Contributor PRs target `develop`. Only KB2UKA promotes `develop` to `main` for
+Contributor PRs target `develop`. Only the maintainer (kazuhidet) promotes `develop` to `main` for
 releases. Neither a PR merge nor CI automatically publishes an installer.
 
 ## Where checks run and cost
@@ -56,7 +56,7 @@ access or that environment anywhere else. No workflow publishes an installer.
 
 External contributors require maintainer approval to run workflows. Review the
 workflow, build scripts and dependencies **before** approving a run. CODEOWNERS
-assigns every contribution to KB2UKA. Protection must require that review and
+assigns every contribution to kazuhidet. Protection must require that review and
 dismiss it after changes; a contributor can alter workflow source and tests,
 so their own green checks alone are never approval. Review new executables,
 network destinations, obfuscation and changes to safety protections manually.
@@ -76,7 +76,7 @@ allowlist and dependency alerts. It
 never changes visibility. Once the owner makes the repo public, run
 `--activate-public` to require the CI checks, CODEOWNER review and CodeQL results,
 require approval for all external contributors, restrict `develop` and `main`
-updates to KB2UKA,
+updates to kazuhidet,
 enable push protection/private vulnerability
 reports, and verify the settings by reading them back. No other settings or
 rulesets are replaced. This helper must run from a reviewed checkout with the
@@ -89,8 +89,8 @@ scan is not a substitute for successful enforcement. Confirm a fork PR runs only
 after approval and cannot merge with a failed required check or missing review.
 
 The required status names are recorded in the setup helper. CodeQL merge rules
-block security alerts at medium or higher, and non-security errors. KB2UKA can
+block security alerts at medium or higher, and non-security errors. kazuhidet can
 bypass review rules **through a PR** for maintainer-authored changes; using that
 exception requires reviewing the actual results. Ordinary contributors cannot
 bypass. The separate "Maintainer merges only" update rule reserves updates to
-`develop` and `main`, including release promotion, to KB2UKA.
+`develop` and `main`, including release promotion, to kazuhidet.

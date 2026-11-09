@@ -3,8 +3,8 @@
 [`packaging/m4-boards.json`](../packaging/m4-boards.json) is the one place
 that says which Apple M4-family Macs this project supports. Only the 13-inch
 M4 Air (J713) is qualified. The plain M4 Mac mini (J773g,
-[#136](https://github.com/Kb2uka/Omarchy-M4-Native/issues/136)) and the
-15-inch M4 Air (J715, [#142](https://github.com/Kb2uka/Omarchy-M4-Native/issues/142))
+[#136](https://github.com/kazuhidet/Omarchy-M4-Native/issues/136)) and the
+15-inch M4 Air (J715, [#142](https://github.com/kazuhidet/Omarchy-M4-Native/issues/142))
 are in testing. Every other board is refused.
 
 Each board names its chip. The M4 boards use the T8132; the M4 Pro Mac mini

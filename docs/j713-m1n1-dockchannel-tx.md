@@ -2,7 +2,7 @@
 
 m1n1's dockchannel console waits for TX space with no limit. This patch bounds
 that wait. It was written for
-[issue #82](https://github.com/Kb2uka/Omarchy-M4-Native/issues/82), but it
+[issue #82](https://github.com/kazuhidet/Omarchy-M4-Native/issues/82), but it
 does not fix #82: the reporter's Air still freezes with it, and their counters
 show its FIFO never fills. The #82 freeze is inside the ANS reset call in
 `nvme_shutdown()`; see [j713-m1n1-issue82-ans-reset.md](j713-m1n1-issue82-ans-reset.md).

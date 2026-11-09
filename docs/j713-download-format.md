@@ -73,7 +73,7 @@ also accepted by the generated release copy, is:
 
 ```sh
 bash download-j713.command \
-  --base-url https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1 \
+  --base-url https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/v0.1.0-alpha.1 \
   --manifest-sha256 MANIFEST_SHA256_FROM_RELEASE \
   --output "$HOME/Downloads/Omarchy-M4-v0.1.0-alpha.1"
 ```

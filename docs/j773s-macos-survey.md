@@ -86,7 +86,7 @@ windows (patch 0013) and the ANS receive-mailbox interrupt roles (patch 0015).
 The mini has no internal panel, and support for more than one monitor is
 required. Every output goes through the DCP coprocessor (three `dcp-expert-v1`
 nodes), so the mini shares the M4 Air's macOS 26 DCP firmware-interface gap
-described in [#125](https://github.com/Kb2uka/Omarchy-M4-Native/pull/125).
+described in [#125](https://github.com/kazuhidet/Omarchy-M4-Native/pull/125).
 Until that is solved, Linux can only use the framebuffer the boot firmware
 leaves on a monitor that was connected at power-on.
 

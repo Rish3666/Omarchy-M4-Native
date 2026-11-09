@@ -115,13 +115,13 @@ oddly, suspect skew before suspecting the DT.
 
 ## After the session
 
-Findings go back to the repo (`Kb2uka/Omarchy-M4-Native`, gap doc updates)
+Findings go back to the repo (`kazuhidet/Omarchy-M4-Native`, gap doc updates)
 and the Obsidian vault. Record absolute dates.
 
 ## Fixing the DT and rebuilding (added 2026-09-01, second staging pass)
 
 The full repo is at `~/omarchy-firstboot/omarchy/` (git checkout of
-`Kb2uka/Omarchy-M4-Native`, main @ cf25805; its `m1n1/` is excluded — use
+`kazuhidet/Omarchy-M4-Native`, main @ cf25805; its `m1n1/` is excluded — use
 the sibling `~/omarchy-firstboot/m1n1/`). `linux-asahi/` inside it is the
 pinned freeze `32be170d0`, clean tree, holding all ten slices. `dtc` 1.8.1
 is installed via homebrew; clang is at `/usr/bin/clang`.

@@ -8,7 +8,7 @@ boot to a framebuffer console, and nothing more. It has not booted.
 
 - The J773s ADT, from the read-only macOS-side survey of 2026-10-17
   ([j773s-macos-survey.md](j773s-macos-survey.md), added by
-  [#126](https://github.com/Kb2uka/Omarchy-M4-Native/pull/126); the raw capture
+  [#126](https://github.com/kazuhidet/Omarchy-M4-Native/pull/126); the raw capture
   holds serial numbers and is kept privately, as for the J713). macOS shows it as text
   (`ioreg -p IODeviceTree -l -w0`). `tools/ioreg-adt.py` rebuilds that text into
   a binary ADT, so this repository's `tools/adt.py` and `tools/adt-audit.py`

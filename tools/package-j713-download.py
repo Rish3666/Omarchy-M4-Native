@@ -16,7 +16,7 @@ PART_BYTES = 1_900_000_000
 MANIFEST = 'download-manifest.tsv'
 DOWNLOADER = 'download-j713.command'
 DOWNLOAD_SUMS = 'DOWNLOAD-SHA256SUMS'
-RELEASE_URL = 'https://github.com/Kb2uka/Omarchy-M4-Native/releases/download/'
+RELEASE_URL = 'https://github.com/kazuhidet/Omarchy-M4-Native/releases/download/'
 RELEASE_DEFAULTS = "release_base=''\nrelease_pin=''\nrelease_tag=''\n"
 SAFE_PATH = re.compile(r'[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\Z')
 SHA = re.compile(r'[0-9a-f]{64}\Z')

@@ -228,21 +228,20 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(gpu['sources'][1:], alpha1_tree)
         # Every GPL binary was rebuilt byte for byte from published source (GPU: issue 77;
         # audio and video modules: 2026-10-14). Mesa was rebuilt from mesa.tar.gz on 2026-11-10
-        # (builders/README.md): all of it but the /opt/m4-mesa libgallium came out identical, as
-        # did the VA-API driver and the speaker daemon. Only that libgallium remains unverified.
-        unverified = {'opt/m4-mesa/lib/libgallium-26.3.0-devel.so'}
+        # (builders/README.md), and the /opt/m4-mesa libgallium from that tree with
+        # recipe/mesa-complete.patch reversed (issue 180), as were the VA-API driver and the
+        # speaker daemon. Nothing remains unverified.
         for name, entry in binaries.items():
             with self.subTest(name=name):
                 mesa = '/m4-mesa/' in name or '/m4-video/20261011/mesa/' in name
-                rebuilt = name not in unverified
-                self.assertEqual(entry['correspondence'], 'rebuilt-identical' if rebuilt else 'unverified')
-                if mesa and rebuilt:
+                self.assertEqual(entry['correspondence'], 'rebuilt-identical')
+                if mesa:
                     self.assertIn({'archive': 'source/mesa.tar.gz',
                                    'sha256': '75c66a3669971936df27a135f26cefb012afe6d592fffe4250f21142510506d9'},
                                   entry['sources'])
-        self.assertEqual(sorted(name for name, entry in binaries.items()
-                                if entry['correspondence'] == 'unverified'),
-                         ['opt/m4-mesa/lib/libgallium-26.3.0-devel.so'])
+        self.assertIn({'archive': 'source/build-inputs-final.tar.gz',
+                       'sha256': '6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945'},
+                      binaries['opt/m4-mesa/lib/libgallium-26.3.0-devel.so']['sources'])
         # The daemon's tree changed after the tag, so like the five kernel modules it joins an
         # archive of that tree at the tag (git archive --format=tar ee98743a ... | gzip -n -9).
         self.assertEqual(binaries['usr/lib/speakersafetyd-j713']['sources'][0],

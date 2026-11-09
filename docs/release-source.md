@@ -123,8 +123,9 @@ the VA-API driver, the speaker daemon) remain `unverified`.
 All nine were rebuilt on 2026-10-14 with read-only kernel trees and the
 recorded builder images (clang 21.1.8). The recipes for those images, and the
 images' package versions, are in [`builders/`](../builders/README.md). The
-README also records a rebuild of `m4-gravity-builder` from its recipe, which
-reproduced the display stage2 loaders byte for byte.
+README also records the rebuild of all three images from those recipes. The
+rebuilt images reproduced 27 distinct recorded outputs byte for byte,
+including all nine binaries above.
 
 `tools/prepare-j713-release.py` scans the finished root and refuses to assemble
 a release in any of these cases:

@@ -5,10 +5,11 @@ These are the recipes for the Docker images that the build scripts and
 history by the person who made the images, Kb2uka, in
 [issue #180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180#issuecomment-6737887823).
 
-**Status:** `m4-gravity-builder` was rebuilt from its recipe on 2026-11-10.
-Its toolchain matched the recorded image exactly, and it reproduced the
-display stage2 loaders byte for byte. See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10).
-The other two images have not been rebuilt.
+**Status:** all three images were rebuilt from these recipes on 2026-11-10.
+`m4-gravity-builder`'s toolchain matched the recorded image exactly. The
+rebuilt images reproduced every recorded output that was tried, 27 distinct
+files, byte for byte. See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
+[Outputs rebuilt on 2026-11-10](#outputs-rebuilt-on-2026-11-10).
 
 Every `apt-get` line installs whatever is current in Ubuntu 26.04 when it runs,
 so a rebuild's versions drift from the recorded image. Before using a rebuilt
@@ -131,8 +132,93 @@ byte-identical to the records:
 The two published loaders' build evidence
 (`packaging/channel-source-joins.json`) names
 `m4-handoff-builder:amd64-rust93`, which has no recipe. This rebuild shows that `m4-gravity-builder` produces the
-same bytes. Nothing else has been rebuilt in this image yet: not the kernel,
-not the GPU or other modules, and not `libevdi`.
+same bytes.
+
+## Outputs rebuilt on 2026-11-10
+
+The other two images were rebuilt the same day from this directory, at commit
+`b974780`:
+
+| Image | Rebuilt as | Image ID |
+| --- | --- | --- |
+| `m4-gravity-mesa-arm-builder:20261008` | `m4-gravity-mesa-arm-builder:20261008-rebuilt` | `sha256:214e94f058cae290bc752b70c2511b12fea305546155f8b0b3c95e209daefdab` |
+| `m4-gravity-builder:fullmodules-20261009` | `m4-gravity-builder:fullmodules-20261009-rebuilt` | `sha256:fbf66f09a63370743c11e9bc1659ff2b5560334b5fe494d6cfc5b750eafbba42` |
+
+Neither has a recorded package manifest to compare against. Their cross
+compiler is `aarch64-linux-gnu-gcc` 15.2.0 (`15.2.0-16ubuntu1`), and the
+fullmodules image has `xz-utils` `5.8.3-1ubuntu0.1`.
+
+**How the outputs were built.** Each output below was built in a rebuilt image
+with the repository's own script, or with the recipe its records give. The
+inputs were alpha.1's published source assets, checked against their pinned
+hashes:
+- `kernel-controller.tar.gz` (`810339d8…`);
+- `kernel-decoder.tar.gz` (`13b89bb0…`);
+- `build-inputs-final.tar.gz` (`6a800de1…`);
+- `reference-sound-exports.symvers` (`9f3e2cf8…`);
+- `m1n1-stage1-source.tar.gz` and `m1n1-stage2-source.tar.gz`;
+- the alpha.1 Air GPU source packet (`c19a7c97…`);
+- `evdi-1.15.1.tar.gz` (`b120df30…`).
+
+The kernel modules were built with `--network none`. The m1n1 loaders need
+the network for their Rust crates, and were built as root, as their scripts
+say. For each, the build directory and the kernel tree were at the paths the
+records use: `/job`, `/kernel`, and `/job/kernel-air-bootstrap`. Those paths
+end up in some outputs.
+
+**Results.** All 27 distinct outputs came out byte-identical. The audio
+modules `apple-admac.ko`, `snd-soc-macaudio.ko` and `snd-soc-tas2764.ko` are
+the same file whether they are built from today's `audio/j713/kernel` or from
+alpha.1's (`ee98743a`). Each is listed once below.
+
+| Output | Built with | SHA-256 | Recorded in |
+| --- | --- | --- | --- |
+| stage2 stock, backlight, backlight-notch | `display/j713/build-backlight-loader.sh` | see the table above | `channel.json`, alpha.1 |
+| stage2 notch | `display/j713/build-notch-loader.sh` | `f2417a74d13838004847a6fbdf946b524005301b88b5a403b1e79cb36d0ec7ca` | `tools/m4-notch.py`, `docs/package-channel.md` |
+| stage1 stock (alpha.1) | `patches-m1n1/build-test-loaders.sh` | `18cc4cd1ba07928078d2cb52a2c1c5f40a4661fd3db7ee6af0e6923fd237be10` | `docs/j713-m1n1-issue82-ans-reset.md` |
+| stage1 `ans1` | same | `8c5a15736c19d0a3428e64f01292791fb54dd68e09f2f5304a7210d19c42adce` | same |
+| stage1 `dctx1-ans1` | same | `77881a4c673c08c58e270b0adfa923701ddc538a072f7b2e3825e5faaa2aaec8` | same |
+| `j713_cpuidle.ko` | `cpu/j713/build-module.sh` | `a2a7947a1d2260abcfc6eb10d7d63643ad2e191e73e93fedddf605116cdfd5a9` | `channel.json` |
+| `j713_pguard.ko` | same | `91fe247e7e83d30f62f35bcf64ddbcb42faa3a1c109881d5aefcb64dc7e5e691` | `channel.json` |
+| `evdi.ko` | `display/evdi/build.sh module` | `c5e65a2bcba6433ff8369fea449ccc4e6be178a392b9c4a959884415953c671a` | `channel.json` |
+| `libevdi.so.1.15.1` (mesa-arm image) | `display/evdi/build.sh library` | `0f1da52db1f7cbd7e0c420d47285ddee78e22dc0a57e789305c1456b163034ce` | `channel.json` |
+| `asahi_m4.ko` (alpha.1) | `gpu/j713/build-test-module.sh` | `80cf3669575edd09aed226a93e47aaaf132e70f1070154629c413c0b40d34578` | `release-source-joins.json` |
+| `asahi_m4.ko` (current `g16.rs`) | same | `de0337a773930c7862a99706112dd71eaaecf2021707da248fd3d07feefdc824` | `channel.json` |
+| `j713_hp_dt.ko` | `tools/build-j713-headphones.sh` steps | `3f501c6193aeddc62031395e899909bf352851278f829458998ca1c4dbbe6149` | `channel.json` |
+| `snd-soc-j713-headphones.ko` | same | `2e743937b4bd8315ec6dba6bef4bbfbf197d4bf6f8688761954579192df48244` | `channel.json` |
+| `snd-soc-j713-group.ko` (current) | `tools/build-j713-audio.sh` kernel steps | `aaad802eb136ff6cb915feaa123001b3eb848bc2f038d0a5b71c8e2ff35d2581` | `channel.json` |
+| `snd-soc-apple-mca.ko` (current) | same | `fb941df4d55c4f2093b4595e0392aaf97ffe3a250228518b18a4f70568bf7454` | `channel.json` |
+| `snd-soc-j713-group.ko` (alpha.1) | same, at `ee98743a` | `465a88aa9f70ceac8682499ad6bd9ecd34a33b35a3b5c556b42f7bd1524272d0` | `release-source-joins.json` |
+| `snd-soc-apple-mca.ko` (alpha.1) | same, at `ee98743a` | `d3194660a28d30ba8ea296b6592836ad4ca9426d9471d05ba8ce3cad284baa1e` | `release-source-joins.json` |
+| `j713_audio_bootstrap.ko` (alpha.1) | same, at `ee98743a` | `1bf6408c629f446e8d73b6962ef58c2a98a3c7ecd5f7b7ae001bcd5bab6c1875` | `release-source-joins.json` |
+| `j713_audio_dt3.ko` (alpha.1) | same, at `ee98743a` | `0b115a55e3aaccad6f148ee152c399c403c8ebcbcbf01f22210e33484c166e4e` | `release-source-joins.json` |
+| `apple-admac.ko` | same | `cd57f99657e6232e45d58645949a0f73b656372d92e272828c14bcd4e63ea110` | `release-source-joins.json` |
+| `snd-soc-macaudio.ko` | same | `1dc3a6878b10154676b1b06529b197baf3b1cf1c81b5ef94128b2f52d605ea34` | `release-source-joins.json` |
+| `snd-soc-tas2764.ko` | same | `dc00caabad80dffe95e872222440a4711ca57a37bd4271ae08e971e22d7d15f7` | `release-source-joins.json` |
+| `j713_dcp_backlight.ko` | `tools/build-j713-backlight.sh` | `2186b280cce0c321b204cfda0cf65d221e42cc63b97b7b884ac31b5999a8e390` | `channel.json` |
+| `avd-controller.ko` (fullmodules image) | `recipe/BUILD.md` in `build-inputs-final.tar.gz` | `ade00c8882ccc32aa8480eba13e9232f3765ba3a461942d2967c22beb7d5ab2d` | `release-source-joins.json` |
+| `apple-avd.ko` (fullmodules image) | same | `89ff8a98cd971392e1ec9d8b6c2b74ff09669e0c681ef35eee4d447aabad9fba` | `release-source-joins.json` |
+
+Notes:
+- **Paths.** `apple-avd.ko` embeds the paths of two kernel headers. It came
+  out different (`bac8a4ba…`) when the decoder tree was unpacked anywhere but
+  `/kernel`, where `recipe/BUILD.md` mounts it. With the tree at `/kernel` it
+  matched. `.text` was the same in both; only `.rodata` and its relocations
+  differed.
+- **The scripts that run Docker themselves.** These are
+  `tools/build-j713-audio.sh` and `tools/build-j713-headphones.sh`. Their
+  kernel steps were run inside the image, without the scripts' own
+  `docker run`, because the Docker host was remote and could not bind-mount
+  local paths. The steps were the same: the `kernel-inputs.sha256` check
+  before and after, the exports hash, and the same `make` line.
+- **Images without a recipe.** The records name them for two of these
+  outputs: `m4-dev-builder:clang21` for `j713_dcp_backlight.ko`, and
+  `m4-handoff-builder:amd64-rust93` for the stage2 loaders. Both outputs came
+  out identical from `m4-gravity-builder`.
+- **Not rebuilt here:**
+  - the kernel `Image`, which no record claims byte-identical;
+  - Mesa and the VA-API driver, MIT userspace whose joins are `unverified`;
+  - the speaker daemon.
 
 ## Images without a recipe
 
@@ -143,5 +229,7 @@ there is no history to recover them from:
 - `m4-dev-builder:clang21`, used for the native backlight module
   (`packaging/channel-source-joins.json`).
 
-Their records name the same Ubuntu clang 21 toolchain family, so
-`m4-gravity-builder` is the best starting point for either.
+Their records name the same Ubuntu clang 21 toolchain family. The outputs
+their records name came out byte-identical from `m4-gravity-builder` (see
+[Outputs rebuilt on 2026-11-10](#outputs-rebuilt-on-2026-11-10)), so use
+`m4-gravity-builder` in place of either.

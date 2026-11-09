@@ -7,8 +7,9 @@ history by the person who made the images, Kb2uka, in
 
 **Status:** all three images were rebuilt from these recipes on 2026-11-10.
 `m4-gravity-builder`'s toolchain matched the recorded image exactly. The
-rebuilt images reproduced every recorded output that was tried, 27 distinct
-files, byte for byte. See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
+rebuilt images reproduced 27 distinct recorded outputs and six Mesa libraries,
+byte for byte. One Mesa library, the `/opt/m4-mesa` libgallium, was not
+reproduced (see [Mesa](#mesa)). See [Rebuild of 2026-11-10](#rebuild-of-2026-11-10) and
 [Outputs rebuilt on 2026-11-10](#outputs-rebuilt-on-2026-11-10).
 
 Every `apt-get` line installs whatever is current in Ubuntu 26.04 when it runs,
@@ -217,8 +218,45 @@ Notes:
   out identical from `m4-gravity-builder`.
 - **Not rebuilt here:**
   - the kernel `Image`, which no record claims byte-identical;
-  - Mesa and the VA-API driver, MIT userspace whose joins are `unverified`;
-  - the speaker daemon.
+  - the VA-API driver and the speaker daemon, MIT userspace whose joins are
+    `unverified`.
+
+### Mesa
+
+Mesa was rebuilt on 2026-11-10 in `m4-gravity-mesa-arm-builder:20261008-rebuilt`.
+It followed the recipe in `recipe/BUILD.md` of alpha.1's
+`build-inputs-final.tar.gz`:
+1. build the host tools;
+2. cross-build for aarch64 with `recipe/mesa-arm.cross` and
+   `MESA_GIT_SHA1_OVERRIDE=87ac51d411`;
+3. install with `DESTDIR`.
+
+It was built under `/build` with `--network none`. The source was alpha.1's
+`mesa.tar.gz` (`75c66a36…`). That archive is GravityLinux/mesa at
+`87ac51d411f0e58a9433567ec2666f457be89e1d` plus `recipe/mesa-complete.patch`,
+file for file. The recipe notes that the host tools had not been recreated
+from a clean tree before; this rebuild did that too.
+
+| Library | SHA-256 | Shipped as |
+| --- | --- | --- |
+| `libgallium-26.3.0-devel.so` | `ce3ec9f55cea61d37d7ecfddf742fe2667773afc15a2e77d411c4d1f81800664` | `/opt/m4-video/20261011/mesa` (the recipe's expected hash) |
+| `libEGL.so.1.0.0` | `f9f3247a5b0b425c15f29cf0773092e95c691e347594cd0b32278f303dc2ab05` | both `/opt/m4-video/20261011/mesa` and `/opt/m4-mesa` |
+| `libGLESv1_CM.so.1.1.0` | `7edfe3b254d802ae26aeebd3572875262dcb32888515fc7e53efb290d3e6d789` | both |
+| `libGLESv2.so.2.0.0` | `b5fed2f5b970db1ee93145afca9159eab484680e6f230d59c1340f066c59095a` | both |
+| `libgbm.so.1.0.0` | `e83c251960678b8707d9afbe8b4ca9747fc146166291bdcf651d77555859a46a` | both |
+| `gbm/dri_gbm.so` | `5408ea008e52c98f5c111d637236e5ba52f07c20020fe188bb496c11ba430956` | both |
+
+All six are byte-identical to the shipped files, so those 11 entries in
+`packaging/release-source-joins.json` are `rebuilt-identical`.
+
+The `/opt/m4-mesa` libgallium (`21cd0ce4…`) was not reproduced.
+- It reports the same version, `Mesa 26.3.0-devel (git-87ac51d411)`, but that
+  string comes from `MESA_GIT_SHA1_OVERRIDE`.
+- It is 184 bytes smaller, and its code differs slightly. For example,
+  `apple9_dag_binary_opcode`, which the source has, is not a separate symbol
+  in it.
+- Its source revision or patches are not recorded. Its join stays
+  `unverified`.
 
 ## Images without a recipe
 

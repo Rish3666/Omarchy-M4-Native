@@ -9,7 +9,9 @@ old revoked, signed by new). Each must pass, and anything else must not.
 import importlib.util
 import json
 from pathlib import Path
+import os
 import shutil
+import subprocess
 import tempfile
 import types
 import unittest
@@ -114,6 +116,79 @@ class SignerTests(unittest.TestCase):
             self.assertTrue(PUBLISH.retired_signature(Path('x.sig'), Path('x')))
         with mock.patch.object(PUBLISH, 'signer', return_value=OTHER), mock.patch.object(PUBLISH, 'RETIRED', (OLD,)):
             self.assertFalse(PUBLISH.retired_signature(Path('x.sig'), Path('x')))
+
+
+
+@unittest.skipUnless(shutil.which('gpg') and shutil.which('gpgconf'), 'gpg is not installed')
+class RevocationCertificateTests(unittest.TestCase):
+    """Phase 2 with real gpg, when the keyring also carries the old key's revocation certificate.
+
+    gpg still reports one VALIDSIG for the revoked key (with REVKEYSIG and KEYREVOKED),
+    so publishing can verify what the old key signed and replace it, and the keyring
+    check still counts each key once.
+    """
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.dir = Path(temp.name)
+        self.signer_home = self.home('signer')
+        for name in ('old', 'new'):
+            self.gpg(self.signer_home, '--quick-gen-key', f'Rotation test {name} <{name}@invalid>',
+                     'ed25519', 'sign', 'never')
+        self.old, self.new = (self.fingerprint(self.signer_home, f'{name}@invalid') for name in ('old', 'new'))
+        self.data = self.dir / 'package'
+        self.data.write_bytes(b'package bytes')
+        self.gpg(self.signer_home, '--local-user', self.old, '--detach-sign', '--no-armor',
+                 '--output', str(self.dir / 'package.sig'), str(self.data))
+        # The certificate gpg wrote when it made the key; its armor lines are escaped with ':'.
+        made = (self.signer_home / 'openpgp-revocs.d' / (self.old + '.rev')).read_text()
+        (self.dir / 'old.rev').write_text(made.replace(':-----BEGIN', '-----BEGIN'))
+        self.gpg(self.signer_home, '--import', str(self.dir / 'old.rev'))
+        self.keyrings = self.dir / 'keyrings'
+        self.keyrings.mkdir()
+        self.gpg(self.signer_home, '--armor', '--output', str(self.keyrings / 'omarchy-m4.gpg'),
+                 '--export', self.old, self.new)
+
+    def home(self, name):
+        home = self.dir / name
+        home.mkdir(mode=0o700)
+        self.addCleanup(subprocess.run, ['gpgconf', '--homedir', str(home), '--kill', 'all'],
+                        capture_output=True)
+        return home
+
+    def gpg(self, home, *args):
+        return subprocess.run(['gpg', '--homedir', str(home), '--batch', '--pinentry-mode', 'loopback',
+                               '--passphrase', '', *args], check=True, capture_output=True, text=True).stdout
+
+    def fingerprint(self, home, user):
+        listing = self.gpg(home, '--with-colons', '--list-keys', user)
+        return next(line.split(':')[9] for line in listing.splitlines() if line.startswith('fpr:'))
+
+    def test_the_old_key_is_revoked_in_the_keyring(self):
+        listing = self.gpg(self.signer_home, '--with-colons', '--list-keys', self.old)
+        self.assertEqual(next(line for line in listing.splitlines() if line.startswith('pub:')).split(':')[1], 'r')
+
+    def test_publishing_still_verifies_what_the_revoked_key_signed(self):
+        verifier = self.home('publisher')
+        self.gpg(verifier, '--import', str(self.keyrings / 'omarchy-m4.gpg'))  # what publish imports
+        signature = self.dir / 'package.sig'
+        with mock.patch.dict(os.environ, {'GNUPGHOME': str(verifier)}):
+            self.assertEqual(PUBLISH.signer(signature, self.data), self.old)
+            with mock.patch.object(PUBLISH, 'FPR', self.new), mock.patch.object(PUBLISH, 'RETIRED', (self.old,)):
+                self.assertFalse(PUBLISH.signed(signature, self.data))
+                self.assertTrue(PUBLISH.retired_signature(signature, self.data))
+            (self.dir / 'other').write_bytes(b'other bytes')
+            self.assertIsNone(PUBLISH.signer(signature, self.dir / 'other'))
+
+    def test_the_phase_2_keyring_passes_the_package_check(self):
+        (self.keyrings / 'omarchy-m4-trusted').write_text(self.new + ':4:\n')
+        (self.keyrings / 'omarchy-m4-revoked').write_text(self.old + '\n')
+        phase2 = {'signing_fingerprint': self.new, 'trusted_fingerprints': [self.new],
+                  'revoked_fingerprints': [self.old]}
+        self.assertEqual(sorted(CHECK.keyring_fingerprints(self.keyrings / 'omarchy-m4.gpg')),
+                         sorted([self.old, self.new]))
+        CHECK.check_keyring(phase2, self.keyrings)
 
 
 if __name__ == '__main__':

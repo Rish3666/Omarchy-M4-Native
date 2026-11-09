@@ -17,3 +17,4 @@ recon/*
 # Python bytecode from running the tests and tools locally.
 __pycache__/
 *.pyc
+key-rotation-result/

@@ -13,3 +13,7 @@ CLAUDE.md
 recon/*
 !recon/README.md
 !recon/pmgr-j713-generated-from-live-adt.dtsi
+
+# Python bytecode from running the tests and tools locally.
+__pycache__/
+*.pyc

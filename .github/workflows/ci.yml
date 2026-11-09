@@ -32,7 +32,7 @@ jobs:
           if [[ "$EVENT" != pull_request || "$BASE" == develop ]]; then
             exit 0
           fi
-          if [[ "$BASE" == main && "$HEAD" == develop && "$HEAD_REPO" == "$REPO" && "$AUTHOR" == Kb2uka ]]; then
+          if [[ "$BASE" == main && "$HEAD" == develop && "$HEAD_REPO" == "$REPO" && "$AUTHOR" == kazuhidet ]]; then
             exit 0
           fi
           echo 'Contributor PRs must target develop. Only the maintainer promotes develop to main.' >&2

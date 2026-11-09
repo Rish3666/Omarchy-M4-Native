@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 import subprocess
 
-REPO = 'Kb2uka/Omarchy-M4-Native'
+REPO = 'kazuhidet/Omarchy-M4-Native'
+OWNER = REPO.split('/')[0]
 BASE = 'repos/' + REPO
 ROOT = Path(__file__).resolve().parents[2]
 CHECKS = ['PR policy', 'Tests (Linux)', 'Speaker daemon (Rust)', 'Installer transport (macOS)', 'Package channel',
@@ -163,7 +164,7 @@ def main():
         parser.error('--gh must name an absolute executable')
     repo = api(args.gh, BASE)
     owner = repo['owner']
-    if repo['full_name'].lower() != REPO.lower() or owner['login'].lower() != 'kb2uka':
+    if repo['full_name'].lower() != REPO.lower() or owner['login'].lower() != OWNER.lower():
         raise ValueError('Unexpected repository')
     desired = rules(owner['id'])
     if args.activate_public:

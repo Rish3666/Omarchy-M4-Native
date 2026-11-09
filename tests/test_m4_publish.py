@@ -26,6 +26,14 @@ def signature(data):
     return b'sig:' + hashlib.sha256(data).hexdigest().encode()
 
 
+def old_signature(data):
+    """A good signature by a key that a rotation's phase 2 revokes."""
+    return b'old:' + hashlib.sha256(data).hexdigest().encode()
+
+
+OLD = 'A' * 40
+
+
 class Release:
     """A GitHub release, the gpg signer and repo-add, simulated."""
 
@@ -107,6 +115,10 @@ def signed_bytes(sig, data):
     return sig == signature(data)
 
 
+def retired(sig, data):
+    return OLD in MODULE.RETIRED and sig.read_bytes() == old_signature(data.read_bytes())
+
+
 class PublishTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -144,6 +156,7 @@ class PublishTests(unittest.TestCase):
              mock.patch.object(MODULE, 'output', release.output), \
              mock.patch.object(MODULE, 'fetch', release.fetch), \
              mock.patch.object(MODULE, 'signed', signed), \
+             mock.patch.object(MODULE, 'retired_signature', retired), \
              mock.patch.object(MODULE, 'release_exists', release.view), \
              mock.patch.object(MODULE, 'source_revision', return_value=self.source_revision) as revision, \
              mock.patch.dict(os.environ, {'PACKAGE_SIGNING_KEY': 'private key'}), \
@@ -384,6 +397,42 @@ class PublishTests(unittest.TestCase):
         self.assertEqual({name for name, _ in listed},
                          {'omarchy-m4-boot-2-1-aarch64.pkg.tar.zst', 'omarchy-m4-keyring-20261012-1-any.pkg.tar.zst'})
         self.assertIn('omarchy-m4-boot-1-1-aarch64.pkg.tar.zst', self.release.assets, 'old versions stay downloadable')
+
+    def test_rotation_re_signs_published_packages(self):
+        # Phase 2: the published packages carry the revoked key's signatures.
+        self.publish()
+        names = [p.name for p in self.built.iterdir()]
+        for name in names:
+            self.release.assets[name + '.sig'] = old_signature(self.release.assets[name])
+        published = {name: self.release.assets[name] for name in names}
+        self.release.uploads.clear()
+        with mock.patch.object(MODULE, 'RETIRED', (OLD,)):
+            self.publish()
+        for name in names:
+            self.assertEqual(self.release.assets[name], published[name], 'the package bytes stay')
+            self.assertEqual(self.release.assets[name + '.sig'], signature(published[name]))
+            self.assertIn(name + '.sig', self.release.uploads)
+            self.assertNotIn(name, self.release.uploads)
+
+    def test_revoked_signature_is_refused_outside_a_rotation(self):
+        self.publish()
+        name = 'omarchy-m4-boot-1-1-aarch64.pkg.tar.zst'
+        self.release.assets[name + '.sig'] = old_signature(self.release.assets[name])
+        with self.assertRaises(SystemExit):
+            self.publish()
+
+    def test_foreign_signature_is_refused_during_a_rotation(self):
+        self.publish()
+        name = 'omarchy-m4-boot-1-1-aarch64.pkg.tar.zst'
+        self.release.assets[name + '.sig'] = b'foreign'
+        with mock.patch.object(MODULE, 'RETIRED', (OLD,)), self.assertRaises(SystemExit):
+            self.publish()
+        self.assertEqual(self.release.assets[name + '.sig'], b'foreign')
+
+    def test_revoked_signing_key_publishes_nothing(self):
+        with mock.patch.object(MODULE, 'RETIRED', (MODULE.FPR,)), self.assertRaises(SystemExit):
+            self.publish()
+        self.assertEqual(self.release.assets, {})
 
     def test_wrong_key_publishes_nothing(self):
         release = Release(fingerprint='0' * 40)

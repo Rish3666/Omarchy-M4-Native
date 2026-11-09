@@ -68,7 +68,10 @@ Air models, Mac mini, iMac, MacBook Pro, M4 Pro and M4 Max are **not qualified**
 by these results. “Very experimental” does not mean their installation works;
 the J713 installer must refuse unsupported boards.
 
-Project integration and original contributions by **studioxradio aka kb2uka**.
+**studioxradio aka kb2uka** is the project's founder and original maintainer, and
+did the project integration and original contributions. Maintained by
+**kazuhidet** since November 2026
+([#180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180)).
 Built on the work of Asahi Linux, Gravity Linux, Omarchy and many other upstream
 contributors. Their authorship and licenses remain theirs.
 
@@ -241,9 +244,12 @@ session logs remain outside the source tree. A clone is not a complete boot kit.
 
 ## Credits and licensing
 
-**studioxradio aka kb2uka** maintains this integration and contributed the
-project-specific research, fixes and packaging. Existing copyright notices using
-KB2UKA are retained. The project does not claim upstream work as original.
+**studioxradio aka kb2uka** founded this project, was its original maintainer and
+contributed the project-specific research, fixes and packaging. Since November
+2026 it is maintained by **kazuhidet**
+([#180](https://github.com/kazuhidet/Omarchy-M4-Native/issues/180)). Existing
+copyright notices using KB2UKA are retained. The project does not claim upstream
+work as original.
 
 - [Asahi Linux](https://asahilinux.org/) and [m1n1](https://github.com/AsahiLinux/m1n1): Apple Silicon research, boot and driver foundations.
 - [Gravity Linux](https://github.com/GravityLinux): M4 kernel/installer groundwork used by this experiment, building on Asahi's work.

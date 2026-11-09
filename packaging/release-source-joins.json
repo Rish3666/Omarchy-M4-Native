@@ -244,16 +244,18 @@
     "opt/m4-video/20261011/vaapi/v4l2_request_drv_video.so": {
       "sha256": "76393532f322cb3bbf12899f3c75c1c5c24321f4518989f1ed58580f1324b9af",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
-          "archive": "source/integration-inputs.tar.gz"
+          "archive": "source/integration-inputs.tar.gz",
+          "sha256": "0959e4cc813cafd32e276fe1cb4f92599fa284ec35a414c0fece598c0a8280df"
         },
         {
           "archive": "source/build-inputs-final.tar.gz",
           "sha256": "6a800de13f6c4ab7318d66a91fe0c68bf1a0c8a49a969228fb709772c1576945"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 from kit/source/video-package/corresponding-source/bridge and kit/source/bridge.cross in integration-inputs.tar.gz, by recipe/BUILD.md (R4 bridge) of build-inputs-final.tar.gz, in m4-audio-daemon-arm-builder rebuilt from builders/, with --network none. The sysroot at /job/sysroot was assembled to match bridge-sysroot-content.jsonl.gz entry for entry (1,626): files from the alpha.1 root, libgbm and gbm.pc from the Mesa rebuild (gbm.pc with /opt/m4-mesa as /usr) and xf86drm.h from Ubuntu libdrm-dev:arm64. Byte for byte; see builders/README.md."
     },
     "usr/lib/omarchy/j713-audio/7.1.9-m4-gpu-backport-20261008/modules/apple-admac.ko": {
       "sha256": "cd57f99657e6232e45d58645949a0f73b656372d92e272828c14bcd4e63ea110",
@@ -391,16 +393,18 @@
     "usr/lib/speakersafetyd-j713": {
       "sha256": "3f5427f631507c71ae25679ea979dbac77eee4a716044c80826da4811f21036d",
       "license": "MIT",
-      "correspondence": "unverified",
+      "correspondence": "rebuilt-identical",
       "sources": [
         {
-          "tree": "audio/j713/speakersafetyd"
+          "archive": "source/j713-audio-speakersafetyd-ee98743a.tar.gz",
+          "sha256": "342ad26aa32ff93cc25d3bc88db0eaae8ebaba8962907a034103d7120c023ded"
         },
         {
           "archive": "source/j713-audio-cargo-sources.tar.gz",
           "sha256": "faf50f21db4b622900bd275441bc321d1a01933afb555e84d1446d38d6027a34"
         }
-      ]
+      ],
+      "evidence": "Rebuilt 2026-11-10 from audio/j713/speakersafetyd at the v0.1.0-alpha.1 tag (ee98743a; the tree changed after it), archived with git archive --format=tar ee98743a audio/j713/speakersafetyd | gzip -n -9, and the vendored crates of j713-audio-cargo-sources.tar.gz placed at /job/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f as a directory source. Built with the cargo command of tools/build-j713-audio.sh in m4-audio-daemon-arm-builder rebuilt from builders/, with --network none, against the 588-member sysroot of sysroot-members.json taken from the alpha.1 root. Byte for byte; see builders/README.md."
     },
     "var/lib/omarchy-m4/gpu-module/alpha1-module.ko": {
       "sha256": "80cf3669575edd09aed226a93e47aaaf132e70f1070154629c413c0b40d34578",

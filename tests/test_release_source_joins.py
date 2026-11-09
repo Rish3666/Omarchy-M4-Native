@@ -228,13 +228,13 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(gpu['sources'][1:], alpha1_tree)
         # Every GPL binary was rebuilt byte for byte from published source (GPU: issue 77;
         # audio and video modules: 2026-10-14). Mesa was rebuilt from mesa.tar.gz on 2026-11-10
-        # (builders/README.md): all of it but the /opt/m4-mesa libgallium came out identical.
-        # That libgallium, the VA-API driver and the speaker daemon remain unverified.
+        # (builders/README.md): all of it but the /opt/m4-mesa libgallium came out identical, as
+        # did the VA-API driver and the speaker daemon. Only that libgallium remains unverified.
         unverified = {'opt/m4-mesa/lib/libgallium-26.3.0-devel.so'}
         for name, entry in binaries.items():
             with self.subTest(name=name):
                 mesa = '/m4-mesa/' in name or '/m4-video/20261011/mesa/' in name
-                rebuilt = entry['license'].startswith('GPL') or (mesa and name not in unverified)
+                rebuilt = name not in unverified
                 self.assertEqual(entry['correspondence'], 'rebuilt-identical' if rebuilt else 'unverified')
                 if mesa and rebuilt:
                     self.assertIn({'archive': 'source/mesa.tar.gz',
@@ -242,9 +242,12 @@ class ManifestTests(unittest.TestCase):
                                   entry['sources'])
         self.assertEqual(sorted(name for name, entry in binaries.items()
                                 if entry['correspondence'] == 'unverified'),
-                         ['opt/m4-mesa/lib/libgallium-26.3.0-devel.so',
-                          'opt/m4-video/20261011/vaapi/v4l2_request_drv_video.so',
-                          *sorted(name for name in binaries if 'speakersafetyd' in name)])
+                         ['opt/m4-mesa/lib/libgallium-26.3.0-devel.so'])
+        # The daemon's tree changed after the tag, so like the five kernel modules it joins an
+        # archive of that tree at the tag (git archive --format=tar ee98743a ... | gzip -n -9).
+        self.assertEqual(binaries['usr/lib/speakersafetyd-j713']['sources'][0],
+                         {'archive': 'source/j713-audio-speakersafetyd-ee98743a.tar.gz',
+                          'sha256': '342ad26aa32ff93cc25d3bc88db0eaae8ebaba8962907a034103d7120c023ded'})
         audio = [entry for name, entry in binaries.items() if '/j713-audio/' in name and name.endswith('.ko')]
         self.assertEqual(len(audio), 7)
         # audio/j713/kernel changed after the tag (#61), so its five modules join an archive of
@@ -268,6 +271,13 @@ class ManifestTests(unittest.TestCase):
         if archive.returncode == 0:
             packed = subprocess.run(['gzip', '-n', '-9'], input=archive.stdout, capture_output=True, check=True)
             self.assertEqual(digest(packed.stdout), alpha1_kernel['sha256'], 'git archive of the tag, gzip -n -9')
+        daemon = subprocess.run(['git', '-C', str(ROOT), 'archive', '--format=tar',
+                                 'ee98743a860437ad5797bf5db080c04e0128528d', 'audio/j713/speakersafetyd'],
+                                capture_output=True)
+        if daemon.returncode == 0:
+            packed = subprocess.run(['gzip', '-n', '-9'], input=daemon.stdout, capture_output=True, check=True)
+            self.assertEqual(digest(packed.stdout), binaries['usr/lib/speakersafetyd-j713']['sources'][0]['sha256'],
+                             'git archive of the tag, gzip -n -9')
         for name in ('apple-avd.ko', 'avd-controller.ko'):
             sources = binaries['opt/m4-video/20261011/kernel/' + name]['sources']
             self.assertIn({'archive': 'source/build-inputs-final.tar.gz',

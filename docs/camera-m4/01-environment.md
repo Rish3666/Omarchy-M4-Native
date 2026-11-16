@@ -66,3 +66,7 @@ AppleH16CamIn-active.txt を解析。IMX958 / config 6、撮影中の Active/Str
 Rust compiler と Clang/LLVM はインストール済みだが、元 build の toolchain とバージョンは異なる。
 既存ツールチェーンとの互換性確認も必要であり、2パッケージを揃えるだけで全ビルド成功とは断定しない。
 現在の Linux DT に apple,remap-streams property は見つからなかった。
+
+ユーザーからビルド環境の補足: macOS をホストとする aarch64 Arch Linux（Omarchy）VM、
+Clang21.1.8 / Rust1.93.1。ローカル対話環境の compiler23/Rust1.99 と混同しない。
+VM で bindgen/rust-src が不足しているとはまだ確認していない。

@@ -16,13 +16,14 @@ J715 の ISP/DART 実値と IMX958 センサーは確認できたが、setfile r
 | A: Hardware identified | PARTIAL: J715/T8132・ISP/DART・IMX958 確認、setfile/indicator/firmware handoff 未確認 |
 | B: Driver implemented | IMPLEMENTED / UNTESTED: T8132 module compile 済み、実機未初期化 |
 | C: Camera capture | BLOCKED: ISP DT なし、Linux indicator 未検証、撮影をコードで拒否 |
-| D: Desktop integration | BLOCKED: フル kernel build は bindgen と Rust 標準ライブラリ source の不足。PipeWire/browser 未検証 |
+| D: Desktop integration | BLOCKED: フル kernel build は VM で未検証。対話環境側は Rust 依存不足。PipeWire/browser 未検証 |
 
 追加コードは 5 本の kernel patch、hash 検証付き準備・採取・独立ビルドツール、回帰テスト。
 `patches-kernel/j715-camera/series` と manifest に適用順・出所を固定した。
 実機に基づく DART DT 草案は全ノード disabled のまま追加した。仮 MMIO/IRQ や M5 用 firmware 固定値は追加していない。
 
-次に必要なのは (1) bindgen を含む対応 Rust ビルド環境、(2) setfile module/revision と Linux firmware handoff/indicator の実装根拠、(3) 権限のある実機ログ閲覧環境。
+ユーザーのビルド環境は aarch64 Arch Linux（Omarchy）VM / Clang21.1.8 / Rust1.93.1 と確認済み。
+次に必要なのは (1) この VM での依存確認と full build/KUnit 実行、(2) setfile module/revision と Linux firmware handoff/indicator の実装根拠、(3) 権限のある実機ログ閲覧環境。
 表示灯の制御実装と点灯・消灯の実機確認後に、撮影拒否ガードを正しい indicator 連動処理へ置き換える。
 その後、独立 kernel の起動、V4L2 capture、PipeWire/browser、suspend/resume と既存機能の回帰を検証する。
 
@@ -34,3 +35,6 @@ J715 の ISP/DART 実値と IMX958 センサーは確認できたが、setfile r
 使用中点灯・終了後消灯を観測した。Linux 側は未検証なので撮影ガードは維持している。
 DART の static remap backport と、J715 入力 geometry に基づく実験 preview preset を追加し、
 モジュール・DT 構文を確認した。KUnit 実行と Linux 実撮影は未達成。
+
+引継ぎ先は [ビルド・試験指示書](07-handoff-instructions-ja.md) を入口にする。
+[同梱物・Transfer コピー結果](08-handoff-package.md) に実際の保存先と制約を記載した。

@@ -12,7 +12,7 @@
 | J715 guard + IPC 修正込み通常 module build | 成功、FORTIFY 警告を解消 |
 | KUnit ケース込み module build | 成功。上流テストと追加した privacy/IPC テストをコンパイル・link |
 | KUnit 実行 | 未実施。モジュールをロードしていない |
-| フル kernel Image/modules/DTB/package | BLOCKED: bindgen と Rust 標準ライブラリ source の不足で Rust 事前検査失敗 |
+| フル kernel Image/modules/DTB/package | この対話環境は Rust 依存不足で未実施。ユーザー VM での full build は未検証 |
 | V4L2 デバイス・フレーム | BLOCKED: ISP DT なし、表示灯未確認、撮影ガードあり |
 | PipeWire/browser | 未検証。sandbox からは PipeWire に接続できない |
 | indicator | 機構・点灯/消灯未検証。STREAMON 拒否ガードのみ実装 |
@@ -139,3 +139,9 @@ Rust 依存の追加確認では標準 core source も不在だった。scripts/
 bindgen 検査後にこの source の存在も要求するので、Rust compiler に対応した rust-src も必要。
 元 build の Clang 21.1.8 / Rust 1.93.1 と現在の 23.1.4 / 1.99.1 の互換性は未検証。
 現在稼働 DT に apple,remap-streams はないことを確認したが、backport の実機回帰の代わりにはならない。
+
+VM 引継ぎ時の補足: aarch64 Arch / Clang21.1.8 / Rust1.93.1 はユーザー確認済み。
+この環境での full camera kernel / KUnit 実行は次担当の検証事項。
+新規 preflight はこの対話環境で compiler/version・bindgen/source 不足を FAIL として検出した。
+これは VM の失敗結果ではない。既存元 kernel source を変更せず fallback archive を作成し、
+pinned ISP/DART の base hash を照合した。通常 mrproper の失敗と clean-dirs= でのコピー内清掃を記録した。

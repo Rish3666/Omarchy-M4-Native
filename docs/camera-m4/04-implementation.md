@@ -40,7 +40,7 @@ T6050 の GPIO、firmware 予約物理アドレス、センサー設定は含め
 
 ```sh
 python3 tools/prepare-j715-camera.py /home/kazu/j715/kbuild /path/to/new-camera-source
-# bindgen がない現在の環境では次の事前検査が失敗する。
+# この対話のローカル Linux では bindgen 不足で失敗した。ユーザー VM は別途検査する。
 make -C /path/to/new-camera-source ARCH=arm64 LLVM=1 rustavailable
 ```
 

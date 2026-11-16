@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0+ OR MIT
+/*
+ * Include inside a future, fully verified J715 ISP node; not enabled here.
+ * J715 firmware logs establish IMX958, config 6 and a 3040x2880 processed
+ * sensor region. This proposed 1280x720 preview crops its centre 1:1:
+ * x = (3040 - 1280) / 2, y = (2880 - 720) / 2.
+ * The output crop is a development choice, not a measured macOS preset.
+ * Linux streaming and the camera indicator have not been validated.
+ */
+sensor-presets {
+	preset0 {
+		apple,config-index = <6>;
+		apple,input-size = <3040 2880>;
+		apple,output-size = <1280 720>;
+		apple,crop = <880 1080 1280 720>;
+	};
+};

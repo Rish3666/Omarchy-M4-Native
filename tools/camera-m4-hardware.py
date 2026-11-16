@@ -99,12 +99,49 @@ def walk_service(n):
         yield from walk_service(child)
 
 
+def camin_facts(tree):
+    facts = {}
+    for n in walk_service(tree):
+        if n['name'] != 'AppleH16CamIn':
+            continue
+        for key in ('ISPFirmwareVersion', 'ISPFirmwareLinkDate', 'FirmwareLoaded',
+                    'FrontCameraActive', 'FrontCameraStreaming'):
+            value = n['props'].get(key, '')
+            if re.fullmatch(r'"[A-Za-z0-9 .:_-]{1,128}"|Yes|No', value):
+                facts[key] = value.strip('"')
+    return facts
+
+
+def log_facts(text):
+    """Return typed observations, never raw messages or per-module data."""
+    ids = sorted({int(v, 16) for v in re.findall(r'\bsensorID=(0x[0-9a-fA-F]+)\b', text)})
+    models = sorted(set(re.findall(r'\bIMX([0-9]{3,4})\b', text)))
+    model = None
+    if len(ids) == len(models) == 1 and ids[0] == int(models[0], 16):
+        model = 'IMX' + models[0]
+    modes = sorted({(int(sid, 16), int(cfg), int(fps)) for sid, cfg, fps in
+                    re.findall(r'\bsensorID=(0x[0-9a-fA-F]+),\s*cfgNum=(\d+),\s*fps=(\d+)', text)})
+    shapes = sorted({tuple(map(int, m)) for m in re.findall(
+        r'SensorRaw:(\d+)x(\d+),\s*SensorCrop:(\d+)x(\d+)', text)})
+    states = [int(v) for v in re.findall(
+        r'UpdateSensorStateInIORegForChannel[^\n]*name:\s*Streaming,\s*state:\s*([01])\b', text)]
+    return {'sensor_ids': ids, 'sensor_names': ['IMX' + m for m in models],
+            'confirmed_sensor_model': model,
+            'modes': [{'sensor_id': sid, 'config_index': cfg, 'requested_fps': fps}
+                      for sid, cfg, fps in modes],
+            'pipeline_shapes': [{'raw': [rw, rh], 'processed': [pw, ph]}
+                                for rw, rh, pw, ph in shapes],
+            'streaming_state_sequence': states,
+            'setfile_module_revision_confirmed': False,
+            'indicator_mechanism_confirmed': False}
+
+
 def service_facts(path, mmio):
     with path.open(errors='replace') as source:
         tree = IOREG.parse_text(source)
     if not any(n['name'] == 'J715AP' for n in walk_service(tree)):
         raise ValueError('IOService dump has no J715AP board node')
-    facts = {}
+    facts = camin_facts(tree)
     for n in walk_service(tree):
         if n['name'].startswith('isp@'):
             raw = n['props'].get('IODeviceMemory', '')
@@ -114,12 +151,6 @@ def service_facts(path, mmio):
                 if regions != mmio:
                     raise ValueError('IOService MMIO disagrees with translated ADT')
                 facts['mmio_matches_adt'] = True
-        if n['name'] == 'AppleH16CamIn':
-            for key in ('ISPFirmwareVersion', 'ISPFirmwareLinkDate', 'FirmwareLoaded',
-                        'FrontCameraActive', 'FrontCameraStreaming'):
-                value = n['props'].get(key, '')
-                if re.fullmatch(r'"[A-Za-z0-9 .:_-]{1,128}"|Yes|No', value):
-                    facts[key] = value.strip('"')
     return facts
 
 
@@ -186,6 +217,8 @@ def main():
     parser.add_argument('--ioservice', type=Path)
     parser.add_argument('--driver', type=Path)
     parser.add_argument('--dart-driver', type=Path)
+    parser.add_argument('--camera-log', type=Path)
+    parser.add_argument('--active-registry', type=Path)
     args = parser.parse_args()
     try:
         raw = args.adt.read_bytes()
@@ -196,6 +229,12 @@ def main():
         if args.dart_driver:
             result['dart_driver_has_static_remap_property'] = (
                 '"apple,remap-streams"' in args.dart_driver.read_text())
+        if args.camera_log:
+            result['camera_log'] = log_facts(args.camera_log.read_text(errors='replace'))
+            result['sensor_model'] = result['camera_log']['confirmed_sensor_model']
+        if args.active_registry:
+            with args.active_registry.open(errors='replace') as source:
+                result['active_registry'] = camin_facts(IOREG.parse_text(source))
     except (ValueError, OSError, KeyError, struct.error) as exc:
         parser.exit(1, f'BLOCKED: {exc}\n')
     print(json.dumps(result, indent=2))

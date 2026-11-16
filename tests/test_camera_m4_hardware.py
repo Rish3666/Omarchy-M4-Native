@@ -70,6 +70,26 @@ class HardwareTests(unittest.TestCase):
             facts = hardware.service_facts(path, [])
         self.assertEqual(facts, {'ISPFirmwareVersion': '6.105', 'FrontCameraStreaming': 'No'})
 
+    def test_sensor_requires_consistent_independent_log_fields(self):
+        text = 'PipelineFrequencyRequest, sensorID=0x958, cfgNum=6, fps=30\nIMX958 boot flag 0x0\n'
+        facts = hardware.log_facts(text)
+        self.assertEqual(facts['confirmed_sensor_model'], 'IMX958')
+        self.assertEqual(facts['modes'], [{'sensor_id': 0x958, 'config_index': 6, 'requested_fps': 30}])
+        self.assertIsNone(hardware.log_facts('IMX958 boot flag 0')['confirmed_sensor_model'])
+        self.assertIsNone(hardware.log_facts(text + 'sensorID=0x558')['confirmed_sensor_model'])
+
+    def test_streaming_and_geometry_do_not_prove_indicator_or_setfile(self):
+        text = ('SensorRaw:3040x5760, SensorCrop:3040x2880\n'
+                'UpdateSensorStateInIORegForChannel - channel: 0, name: Streaming, state: 1\n'
+                'UpdateSensorStateInIORegForChannel - channel: 0, name: Streaming, state: 0\n'
+                'FrontCameraModuleSerialNumString=private-secret\n')
+        facts = hardware.log_facts(text)
+        self.assertEqual(facts['streaming_state_sequence'], [1, 0])
+        self.assertEqual(facts['pipeline_shapes'], [{'raw': [3040, 5760], 'processed': [3040, 2880]}])
+        self.assertFalse(facts['indicator_mechanism_confirmed'])
+        self.assertFalse(facts['setfile_module_revision_confirmed'])
+        self.assertNotIn('private-secret', str(facts))
+
 
 if __name__ == '__main__':
     unittest.main()

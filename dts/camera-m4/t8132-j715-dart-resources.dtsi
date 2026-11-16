@@ -3,8 +3,9 @@
  * J715 DART resources observed in macOS 27.2.1 (26B131) IODeviceTree.
  * Resource draft only: all nodes stay disabled and this file is not
  * included by the production board tree. Power domains and locked-root
- * handling still need validation. The old 7.1.9 DART driver does not
- * implement apple,remap-streams; do not enable these nodes on that driver.
+ * handling still need validation. Unpatched 7.1.9 does not implement
+ * apple,remap-streams. Patch 0005 adds unlocked-DART static remaps but does
+ * not establish safe power sequencing or support for locked camera roots.
  * No firmware physical addresses or guessed ISP mailbox offsets are added.
  */
 

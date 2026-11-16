@@ -1,0 +1,92 @@
+{
+  "upstream_repository": "https://github.com/omacom/linux-aurora.git",
+  "upstream_commit": "39d5f88ab4e54bb61eecd3fba79e3242005f2f76",
+  "scope": "Generic ISP prerequisites only; no T8132 OF match or J715 device tree",
+  "base_source": "Existing local 7.1.9 kbuild ISP sources; base Git commit unavailable",
+  "files": {
+    "drivers/media/platform/apple/isp/Kconfig": {
+      "base_sha256": "ffc6a5751833ccf5d91b2cb592ea5deada9ae840096deae26bbe8ccfac81c145",
+      "upstream_sha256": "72bb934d652dbeb33a54e8367fe6f35170641b73d0bdc4e71fd591f8b2f34a55"
+    },
+    "drivers/media/platform/apple/isp/Makefile": {
+      "base_sha256": "9efe312299a2e294395e02a559ebe5729b2a39caedd1008fa06d5317c5584b31",
+      "upstream_sha256": "7e9ea05ed3014df20b9fab56a8b2a0ee0f197642bb9b640acc5d9c99e619a9df"
+    },
+    "drivers/media/platform/apple/isp/isp-cam.c": {
+      "base_sha256": "b93aa603ec5ed859b5f47ae9f64bba9e69773b719de0a58be9777f870816bff1",
+      "upstream_sha256": "9b6945178c712118034bd893c2da018c5f64fd866fca3b77166f7cc37e0ffefe"
+    },
+    "drivers/media/platform/apple/isp/isp-cam.h": {
+      "base_sha256": "daaadc5082f04c527becca8adfc064bf18ecda50fd890a3acd577042c0cf6c21",
+      "upstream_sha256": "143b055e956a79d186532e0224b9b923bc96e9604df6cdde0050aac43239fed4"
+    },
+    "drivers/media/platform/apple/isp/isp-cmd.c": {
+      "base_sha256": "2e2aa369e9e2411798ddd49e6d816d4a5ad1ddbb3393bb041181deaa0f4494d4",
+      "upstream_sha256": "080c8050df15231b71397217ab11e1fba24ff862282b8510c303cf8c521f990c"
+    },
+    "drivers/media/platform/apple/isp/isp-cmd.h": {
+      "base_sha256": "9b9e176a6e07b22dc83a60fa3f273829b24da9758fcc331042b4458b4deb6c00",
+      "upstream_sha256": "a87b04cbce9f2869c1967bd536342a53ed357f85ac3f3b7016741ec2221f58c0"
+    },
+    "drivers/media/platform/apple/isp/isp-drv.c": {
+      "base_sha256": "7ed91c7cdcca1e81020d414ab9aab1f9f9d90bb0d3f2348a98f513a6273e9adc",
+      "upstream_sha256": "268551f3c1ac067a3368deedf84454fc048a1596b985832e62b9e11348998fe3"
+    },
+    "drivers/media/platform/apple/isp/isp-drv.h": {
+      "base_sha256": "53360ac32670bced46411c93deb22858b00e33491698b20d3dafb4a5b8523b70",
+      "upstream_sha256": "ac168d7038ef09eebce848655a664d7f9c598badbcc6890b589954e3b443d8e6"
+    },
+    "drivers/media/platform/apple/isp/isp-fw.c": {
+      "base_sha256": "add43c276bb76636fceaaac126791c7c89249e14b5e0ffe0550593424ad336fb",
+      "upstream_sha256": "f13421bf7929b90216b3365a4bce678117496d8c9b08cc62e609ccc4b5640733"
+    },
+    "drivers/media/platform/apple/isp/isp-fw.h": {
+      "base_sha256": "951934e7f49ab937bcda5079b6c4dbb415996cef40b40e9953a0515fa473c5cc",
+      "upstream_sha256": "fe47577e80921a37105a0cc9291f4a3da0d652c24765a499c98906fa70dfa048"
+    },
+    "drivers/media/platform/apple/isp/isp-iommu.c": {
+      "base_sha256": "23913a1559b9c9ebf1277912c60950d300d8a2318bd23b1fdae2ba91865a4270",
+      "upstream_sha256": "a6f5e8728cd7e81ad81895a8e60f72d43037ee713e249a1283c931fbd5033e58"
+    },
+    "drivers/media/platform/apple/isp/isp-iommu.h": {
+      "base_sha256": "34c9b63e1643dfc4fb04b842f38faa0bf5960db2a21ded7392fcdc41e3c5ff57",
+      "upstream_sha256": "10e077eb8cd7fcbb24e61eda048bdf7ecb4cdfebc708fdbbfd3efbaa4c262b16"
+    },
+    "drivers/media/platform/apple/isp/isp-ipc-layout-test.c": {
+      "base_sha256": null,
+      "upstream_sha256": "b81aaa17477d597d6734e6bc738bc9d94f4b47cd05b10c299efc2f2f35fb2212"
+    },
+    "drivers/media/platform/apple/isp/isp-ipc-layout.h": {
+      "base_sha256": null,
+      "upstream_sha256": "1f5ed0bbacca1e729f8df7211c99dd702c5baa92903e659bfd94213098f0c936"
+    },
+    "drivers/media/platform/apple/isp/isp-ipc-test.c": {
+      "base_sha256": null,
+      "upstream_sha256": "b746c03a39ee251daf520aa4feeb9364a65bf99760eb5a5859d3a6ef4ce336e2"
+    },
+    "drivers/media/platform/apple/isp/isp-ipc.c": {
+      "base_sha256": "c1b75f0e9f6f7ffa83cbaf80088dcbf5feeeab33d60e2d538f6ccd900fd3e860",
+      "upstream_sha256": "f0e60019d25a1429ee6d5f47da83e2c10acd4578551606936a3951626c42b5a9"
+    },
+    "drivers/media/platform/apple/isp/isp-ipc.h": {
+      "base_sha256": "ef0eba82b3a9ef53c53a3f95a65eff419f8daebfcb7e926d5c0f7157094c07b2",
+      "upstream_sha256": "6e2fc8c30a7872992f94c2a6ce227589169f720730958ec405f0b1e9c254516e"
+    },
+    "drivers/media/platform/apple/isp/isp-regs.h": {
+      "base_sha256": "eec28995d7a197b29bd5bbaf39a0f0e1c345de86a1c090725edfd9d3f349cc19",
+      "upstream_sha256": "2d1c0e7ce40410ac023fd3a3a10fafee258f71497dce1071d1c2a8363db04def"
+    },
+    "drivers/media/platform/apple/isp/isp-v4l2-test.c": {
+      "base_sha256": null,
+      "upstream_sha256": "7ffeaf54b10af9d9f3a6d7acadd6105fb5d33a1c949fabfb67f6f825e0ceaa65"
+    },
+    "drivers/media/platform/apple/isp/isp-v4l2.c": {
+      "base_sha256": "7ab480a1b1f320bc84bc3616d401dfac8cd04a51460dc3de589f56cfadf5cc5d",
+      "upstream_sha256": "231f291d06f1277a4f02ad913fc86863a1b29e4dc899130aa86eea95fda37aa4"
+    },
+    "drivers/media/platform/apple/isp/isp-v4l2.h": {
+      "base_sha256": "199070a74391f5c9072dc36aa3c91db0c5f43466f42300bb729fddeaabaa6553",
+      "upstream_sha256": "506620fb8c261342092e31cbbce3e8f20867f7d14feee86b99388be029c17fa5"
+    }
+  }
+}

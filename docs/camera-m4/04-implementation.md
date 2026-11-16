@@ -1,7 +1,7 @@
 # 実装とビルド統合
 
 状態: 補助ツール **IMPLEMENTED / UNTESTED（一部実行済み）**。
-カメラドライバー移植・DT・setfile は **NOT IMPLEMENTED / BLOCKED**。
+汎用 H17 前提パッチはビルド済み。T8132 ドライバー移植・DT・setfile は **NOT IMPLEMENTED / BLOCKED**。
 
 追加した実装:
 
@@ -44,3 +44,16 @@ package release/hash、音声・映像の再認証を更新する。
 実際に起動できる復旧エントリーを別途確認する。
 その後も実験イメージを別名で配置し、承認済みの一回限りの選択から起動する。
 既定エントリー変更、NVRAM/EFI 変数更新、firmware flash は本ツールの対象外。
+
+追加の汎用前提パッチ: `patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch`。
+上流の H17/T8140 対応を含む ISP snapshot を現行の 7.1.9 ソースへ持ち込む差分。
+対象ファイルの base/upstream SHA256 は隣の manifest に保存した。
+パッチの dry-run と、更新後 ISP の依存込みモジュールビルドは成功。
+単独で J715 カメラを有効にするものではなく、DT ノードも追加しない。
+実機向け通常配布・起動試験は未実施。
+
+```sh
+# 正確な base ハッシュを manifest と照合してから、隔離コピーに適用する
+patch --dry-run -p1 -d /path/to/kernel-copy < patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch
+patch -p1 -d /path/to/kernel-copy < patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch
+```

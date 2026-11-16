@@ -33,10 +33,16 @@ Clang 21.1.8 / Rust 1.93.1 を固定しており、今回の実機 build 16 と�
 
 制限:
 
-- `git ls-remote` と専用 fetch スクリプトは `Could not resolve host: github.com` で失敗。
+- `git ls-remote` と専用 fetch スクリプトは、この実行環境では `Could not resolve host: github.com` で失敗。DNS 制限と断定したのは誤り。ユーザーの通常端末では clone に成功している。
 - dmesg は Operation not permitted。sudo は no-new-privileges により使用不可。
 - wpctl はセッション・システムバスに接続できず失敗。サービス停止を意味しない。
 - フル ADT、J715 カメラ固有の macOS 情報は今回の探索範囲では発見できなかった。
 
 再採取: `python3 tools/camera-m4-inspect.py > /tmp/j715-camera.json`。
 生データは `/home/kazu/Work/camera-build/environment.json` に保存し、個人環境情報を含み得るため Git に追加しない。
+
+追記（ユーザーの clone 後）: `/home/kazu/Work/linux-aurora` を確認した。
+`integration/aurora` は `39d5f88ab4e54bb61eecd3fba79e3242005f2f76`、作業ツリーは清浄。
+このブランチには H17/T8140 対応があるが T8132 ISP 対応はない。
+こちらでの PR #421/#422 fetch は同じ名前解決エラーで失敗した。
+システム全体の DNS や通常端末の接続障害とは扱わない。

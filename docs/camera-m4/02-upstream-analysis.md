@@ -1,7 +1,7 @@
 # 上流 ISP 変更の分析
 
 状態: **PARTIAL / BLOCKED**。GitHub PR 本文・コミットリンクの閲覧はできたが、
-Git fetch、patch URL、raw ソースの取得に失敗した。全差分・全前提のレビューと適用は未完了。
+この実行環境で Git fetch、patch URL、raw ソースの取得に失敗した。ユーザーが通常端末で clone したソースは利用可能。全差分・全前提のレビューと適用は未完了。
 コミット番号は PR の実際のリンクから得たもので、ローカル Git オブジェクトの検証は未実施。
 
 | Component | Existing support | Missing changes | Source commit |
@@ -49,4 +49,13 @@ DMA/IOVA、電源、KUnit の前提を一覧化した後に最小差分を移植
 現在のカーネルツリーに Git がないため、同一コミット有無の証明はできない。
 ただしソース・インストール済みモジュール双方に T8132 match がないことは確認した。
 
-再利用済み上流コード: **なし**。コミットリンクの確認を移植完了とは報告しない。
+PR #421/#422 の再利用済みコード: **なし**。コミットリンクの確認を移植完了とは報告しない。
+
+追加取得された既存ブランチの ISP snapshot は、汎用 H17 前提パッチとして再利用した。
+出所は `39d5f88ab4e54bb61eecd3fba79e3242005f2f76`、ISP の最終変更は
+`7bdc7439d955a8086876c2142dac24e4ea4905c1`。
+`patches-kernel/j715-camera/source-manifest.json` にファイルごとの元ソース・上流ハッシュを保存。
+これは単一 upstream commit の cherry-pick ではなく、既存 7.1.9 ISP との差分である。
+元の著作権・ライセンス表記を維持した。寄与者・履歴は固定 upstream SHA の
+`git log -- drivers/media/platform/apple/isp` を参照する。
+T8132 の MMIO/電源/indicator 変更は含まない。

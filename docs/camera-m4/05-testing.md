@@ -8,7 +8,7 @@
 | 採取ツール | Linux 実機で JSON 生成済み、ADT は合成データ試験のみ |
 | 単体テスト | 3 件成功 |
 | shell 構文・diff 空白 | 通過 |
-| 上流取得 | BLOCKED: DNS 失敗 |
+| 上流取得 | PARTIAL: 通常端末で clone 成功、この実行環境での PR fetch は名前解決失敗 |
 | ISP 旧ソースの W=1 コンパイル | 各 C オブジェクトと apple-isp.o の生成を確認、警告あり |
 | 単独 ISP モジュールの link | media/vb2/V4L2 の未解決シンボルで modpost 失敗 |
 | 旧 ISP + 必要な media 依存モジュールの link | 成功（T8132 対応を含まない、未ロード） |
@@ -79,3 +79,10 @@ ffmpeg -f rawvideo -pixel_format nv12 -video_size 1280x720 -i /tmp/j715-camera.n
 DART fault の不在を確認し、再開閉・中断・異常終了・suspend/resume・電源停止を試す。
 LED は open 時だけでなく STREAMON/STREAMOFF と連動することを確認する。
 最後に PipeWire、アプリ、ブラウザーを個別検証する。
+
+clone 後の追加検証: upstream `39d5f88ab4e54bb61eecd3fba79e3242005f2f76` の
+ISP ディレクトリを `/home/kazu/Work/camera-build/aurora-prereq/isp` にコピー。
+上記比較ビルドと同じ mc/v4l2-core/videobuf2 の依存構成で、
+`M=/home/kazu/Work/camera-build/aurora-prereq` としてビルド成功。
+ログは `/home/kazu/Work/camera-build/aurora-prereq-build.log`。
+T8132 未対応の汎用 H17 前提パッチについてのコンパイル確認であり、実機 capture の証拠ではない。

@@ -1,0 +1,4836 @@
+diff --git a/drivers/media/platform/apple/isp/Kconfig b/drivers/media/platform/apple/isp/Kconfig
+index b51d19ee115ded59a6ab5a61facb5ddc6919cb0a..3967e51d472cf9224505e89f313cc88217744efb 100644
+--- a/drivers/media/platform/apple/isp/Kconfig
++++ b/drivers/media/platform/apple/isp/Kconfig
+@@ -8,15 +8,18 @@ config VIDEO_APPLE_ISP
+ 	select APPLE_PMP_REPORT
+ 	depends on ARCH_APPLE || COMPILE_TEST
+ 	depends on OF_ADDRESS
++	depends on PM
+ 	depends on V4L_PLATFORM_DRIVERS
+ 	depends on VIDEO_DEV
+ 	help
+ 	  Driver for the image signal processor that runs the built-in
+ 	  camera of Apple silicon machines. The ISP firmware is loaded by
+ 	  the bootloader. When a stream starts, the driver loads the
+-	  calibration file for the detected camera module,
++	  sensor tuning file for the detected camera model,
+ 	  apple/isp_<module>_<revision>XX.dat, from the firmware search
+-	  path; if it is missing, the stream runs without calibration.
++	  path; if it is missing, the stream runs without sensor tuning.
++	  Invalid files and firmware upload errors fail the stream setup.
++	  These setfiles do not contain per-module factory calibration.
+ 
+ config VIDEO_APPLE_ISP_KUNIT_TEST
+ 	bool "KUnit tests for the Apple ISP driver" if !KUNIT_ALL_TESTS
+@@ -24,9 +27,10 @@ config VIDEO_APPLE_ISP_KUNIT_TEST
+ 	depends on KUNIT=y || VIDEO_APPLE_ISP=m
+ 	default KUNIT_ALL_TESTS
+ 	help
+-	  Builds unit tests for the videobuf2 queue set-up and for the
+-	  shared memory the firmware frees into the Apple ISP driver. They
+-	  need no hardware. Only useful for kernel developers running KUnit.
++	  Builds unit tests for queue setup, P010 layouts and buffer identity,
++	  firmware sensor geometry, the capture command stream, shared memory
++	  retirement and the per-SoC DART address filter windows. The command
++	  tests stub the IPC transport and need no hardware. Only useful for kernel developers running KUnit.
+ 
+ 	  If unsure, say N.
+ 
+diff --git a/drivers/media/platform/apple/isp/isp-cam-test.c b/drivers/media/platform/apple/isp/isp-cam-test.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..191d8ada0d265440d97caa313b02497ab14e61d4
+--- /dev/null
++++ b/drivers/media/platform/apple/isp/isp-cam-test.c
+@@ -0,0 +1,680 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Synthetic geometry checks: no camera firmware or setfile data. */
++#include <kunit/test.h>
++#include <kunit/static_stub.h>
++#include <kunit/device.h>
++#include "isp-ipc.h"
++
++static void isp_test_sensor_geometry(struct kunit *test)
++{
++	struct cmd_ch_camera_config config = {
++		.in_width = 1920, .in_height = 2160,
++		.out_width = 1920, .out_height = 1080,
++		.in_width2 = 1920, .in_height2 = 2160,
++		.out_width2 = 1920, .out_height2 = 1080,
++	};
++
++	KUNIT_EXPECT_TRUE(test, isp_sensor_config_usable(&config));
++	/* A future larger output is accepted only when both descriptions agree. */
++	config.in_width = 4096;
++	config.in_width2 = 4096;
++	config.in_height = 3072;
++	config.in_height2 = 3072;
++	config.out_width = 4096;
++	config.out_width2 = 4096;
++	config.out_height = 3072;
++	config.out_height2 = 3072;
++	KUNIT_EXPECT_TRUE(test, isp_sensor_config_usable(&config));
++	config.out_height2 = 2160;
++	KUNIT_EXPECT_FALSE(test, isp_sensor_config_usable(&config));
++	config.out_height2 = 3072;
++	config.in_height2 = 2160;
++	KUNIT_EXPECT_FALSE(test, isp_sensor_config_usable(&config));
++	config.in_height2 = 3072;
++	config.out_width = 4097;
++	config.out_width2 = 4097;
++	KUNIT_EXPECT_FALSE(test, isp_sensor_config_usable(&config));
++	config.out_width = 0;
++	config.out_width2 = 0;
++	KUNIT_EXPECT_FALSE(test, isp_sensor_config_usable(&config));
++	config.out_width = 8192;
++	config.out_width2 = 8192;
++	KUNIT_EXPECT_FALSE(test, isp_sensor_config_usable(&config));
++}
++
++struct isp_test_command {
++	u32 words[39];
++	u32 size;
++};
++
++/* Derived from the proxy command fixture, with contiguous V4L2 plane sizes. */
++static const struct isp_test_command isp_test_preview_commands[] = {
++	{{0, 0x24, 0}, 0xc},
++	{{0, 0x13b, 0, 1}, 0x10},
++	{{0, 0x107, 0, 5}, 0x10},
++	{{0, 0x10e, 0, 1}, 0x10},
++	{{0, 0x10f, 0}, 0xc},
++	{{0, 0x80c, 0, 0, 0, 1280, 720}, 0x1c},
++	{{0, 0xb09, 0, 1280, 720, 1, 0x12, 2560, 2560, 0, 0, 720, 0, 1280}, 0x38},
++	{{0, 0x208, 0, 7680}, 0x10},
++	{{0, 0x20a, 0, 3840}, 0x10},
++	{{[1] = 0x117, [3] = 8 << 16, [4] = 0x8000, [5] = 0x8000, [37] = 1}, 0x9c},
++	{{[1] = 0x117, [3] = 9 | 2 << 16, [4] = 1843200, [5] = 2560,
++	  [12] = 921600, [13] = 2560, [37] = 2}, 0x9c},
++	{{0, 0x125, 0, 1}, 0x10},
++	{{0, 0xb0d, 0, 1}, 0x10},
++	{{0, 0x138, 0, 0}, 0x10},
++};
++
++struct isp_test_command_trace {
++	unsigned int count;
++	unsigned int fail_at;
++	int setfile_error;
++	unsigned int setfile_calls;
++	u32 last_opcode;
++};
++
++static int isp_test_send(struct apple_isp *isp, void *args, u32 insize,
++			 u32 outsize, int timeout)
++{
++	struct kunit *test = kunit_get_current_test();
++	struct isp_test_command_trace *trace = test->priv;
++	const struct isp_test_command *expected;
++	u32 expected_outsize;
++
++	if (trace->count >= ARRAY_SIZE(isp_test_preview_commands)) {
++		KUNIT_FAIL(test, "unexpected extra command");
++		return -EIO;
++	}
++	expected = &isp_test_preview_commands[trace->count++];
++	KUNIT_EXPECT_EQ(test, insize, expected->size);
++	expected_outsize = expected->words[1] == 0x117 ||
++		(expected->words[1] == 0x24 && !isp_is_p010(isp)) ? insize : 0;
++	KUNIT_EXPECT_EQ(test, outsize, expected_outsize);
++	if (insize == expected->size)
++		KUNIT_EXPECT_MEMEQ(test, args, expected->words, insize);
++	if (trace->count == trace->fail_at)
++		return -ETIME;
++	return 0;
++}
++
++static void isp_test_free_controls(void *ptr)
++{
++	v4l2_ctrl_handler_free(ptr);
++}
++
++static struct apple_isp *isp_test_capture_alloc(struct kunit *test)
++{
++	static const struct apple_isp_hw hw = {
++		.gen = ISP_GEN_T6040, .fw_abi = ISP_FW_ABI_H17,
++		.scl1 = true, .meta_size = ISP_META_SIZE_T8140,
++	};
++	static struct isp_preset preset = {
++		.index = 5, .input_dim = {1920, 2160},
++		.output_dim = {1280, 720}, .crop_size = {1280, 720},
++	};
++	struct apple_isp *isp = kunit_kzalloc(test, sizeof(*isp), GFP_KERNEL);
++	struct isp_format *fmt;
++	int err;
++
++	KUNIT_ASSERT_NOT_NULL(test, isp);
++	isp->dev = kunit_device_register(test, "apple-isp-camera-test");
++	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, isp->dev);
++	isp->hw = &hw;
++	isp->frame_rate = 30;
++	fmt = isp_get_current_format(isp);
++	fmt->version = 0x958;
++	fmt->pixelformat = V4L2_PIX_FMT_P010;
++	fmt->preset = &preset;
++	fmt->strides[0] = 2560;
++	fmt->strides[1] = 2560;
++	fmt->plane_size[0] = 1843200;
++	fmt->plane_size[1] = 921600;
++	v4l2_ctrl_handler_init(&isp->ctrl_handler, 1);
++	err = kunit_add_action_or_reset(test, isp_test_free_controls, &isp->ctrl_handler);
++	KUNIT_ASSERT_EQ(test, err, 0);
++	isp->exposure_priority =
++		v4l2_ctrl_new_std(&isp->ctrl_handler, NULL,
++				  V4L2_CID_EXPOSURE_AUTO_PRIORITY, 0, 1, 1, 1);
++	KUNIT_ASSERT_EQ(test, isp->ctrl_handler.error, 0);
++	kunit_activate_static_stub(test, isp_cmd_send, isp_test_send);
++	return isp;
++}
++
++static void isp_test_preview_stream(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_test_command_trace trace = {};
++
++	test->priv = &trace;
++	KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), 0);
++	KUNIT_EXPECT_EQ(test, trace.count, ARRAY_SIZE(isp_test_preview_commands));
++}
++
++static void isp_test_preview_command_failures(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_test_command_trace trace;
++
++	test->priv = &trace;
++	for (unsigned int i = 1; i <= ARRAY_SIZE(isp_test_preview_commands); i++) {
++		trace = (struct isp_test_command_trace){ .fail_at = i };
++		KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), -ETIME);
++		KUNIT_EXPECT_EQ(test, trace.count, i);
++	}
++}
++
++static int isp_test_load_setfile(struct apple_isp *isp, u32 ch)
++{
++	struct kunit *test = kunit_get_current_test();
++	struct isp_test_command_trace *trace = test->priv;
++
++	trace->setfile_calls++;
++	return trace->setfile_error;
++}
++
++static void isp_test_setfile_failure_stops_setup(struct kunit *test)
++{
++	static const int errors[] = { -EINVAL, -EIO, -ETIME, -EINTR, -ENOMEM };
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_test_command_trace trace;
++
++	isp_get_current_format(isp)->pixelformat = V4L2_PIX_FMT_NV12;
++	kunit_activate_static_stub(test, isp_ch_load_setfile, isp_test_load_setfile);
++	test->priv = &trace;
++	for (unsigned int i = 0; i < ARRAY_SIZE(errors); i++) {
++		trace = (struct isp_test_command_trace){ .setfile_error = errors[i] };
++		KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), errors[i]);
++		/* Only the flicker command preceded the rejected tuning. */
++		KUNIT_EXPECT_EQ(test, trace.count, 1);
++		KUNIT_EXPECT_EQ(test, trace.setfile_calls, 1);
++	}
++}
++
++/* Count NV12 setup commands and fail the chosen one, without a fixture. */
++static int isp_test_count_send(struct apple_isp *isp, void *args, u32 insize,
++			       u32 outsize, int timeout)
++{
++	struct kunit *test = kunit_get_current_test();
++	struct isp_test_command_trace *trace = test->priv;
++
++	trace->last_opcode = ((const u32 *)args)[1];
++	if (++trace->count == trace->fail_at)
++		return -ETIME;
++	return 0;
++}
++
++static void isp_test_optional_setfile_continues_setup(struct kunit *test)
++{
++	static const int results[] = { 0, -ENOENT };
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_test_command_trace trace;
++
++	isp_get_current_format(isp)->pixelformat = V4L2_PIX_FMT_NV12;
++	kunit_activate_static_stub(test, isp_ch_load_setfile, isp_test_load_setfile);
++	kunit_activate_static_stub(test, isp_cmd_send, isp_test_count_send);
++	test->priv = &trace;
++	for (unsigned int i = 0; i < ARRAY_SIZE(results); i++) {
++		trace = (struct isp_test_command_trace){
++			.setfile_error = results[i], .fail_at = 2,
++		};
++		/* The mains frequency after tuning, rather than tuning, fails. */
++		KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), -ETIME);
++		KUNIT_EXPECT_EQ(test, trace.count, 2);
++		KUNIT_EXPECT_EQ(test, trace.last_opcode, 0x8212);
++		KUNIT_EXPECT_EQ(test, trace.setfile_calls, 1);
++	}
++}
++
++struct isp_test_nv12_trace {
++	unsigned int count;
++	u32 opcode[64];
++	u32 size[64];
++	u32 word[64][3];
++};
++
++/* Accept every NV12 setup command and record its opcode and first fields. */
++static int isp_test_record(struct apple_isp *isp, void *args, u32 insize,
++			   u32 outsize, int timeout)
++{
++	struct kunit *test = kunit_get_current_test();
++	struct isp_test_nv12_trace *trace = test->priv;
++	const u32 *words = args;
++	unsigned int i = trace->count;
++
++	if (i >= ARRAY_SIZE(trace->opcode)) {
++		KUNIT_FAIL(test, "unexpected extra command");
++		return -EIO;
++	}
++	trace->opcode[i] = words[1];
++	trace->size[i] = insize;
++	for (unsigned int j = 0; j < 3 && 12 + 4 * j < insize; j++)
++		trace->word[i][j] = words[3 + j];
++	trace->count++;
++	return 0;
++}
++
++static int isp_test_find(const struct isp_test_nv12_trace *trace, u32 opcode)
++{
++	for (unsigned int i = 0; i < trace->count; i++)
++		if (trace->opcode[i] == opcode)
++			return i;
++	return -1;
++}
++
++static int isp_test_no_setfile(struct apple_isp *isp, u32 ch)
++{
++	return 0;
++}
++
++static struct apple_isp *isp_test_nv12_alloc(struct kunit *test,
++					     enum isp_sensor_id id)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_format *fmt = isp_get_current_format(isp);
++
++	fmt->pixelformat = V4L2_PIX_FMT_NV12;
++	fmt->id = id;
++	fmt->version = isp_setfiles[id].version;
++	isp->temporal_filter = 1;
++	kunit_activate_static_stub(test, isp_ch_load_setfile, isp_test_no_setfile);
++	kunit_activate_static_stub(test, isp_cmd_send, isp_test_record);
++	return isp;
++}
++
++/* Expect exactly @n commands, in this order, from the first of them on. */
++static void isp_test_expect_run(struct kunit *test,
++				const struct isp_test_nv12_trace *trace,
++				const u32 (*run)[2], unsigned int n)
++{
++	int first = isp_test_find(trace, run[0][0]);
++
++	KUNIT_ASSERT_GE(test, first, 0);
++	KUNIT_ASSERT_LE(test, first + n, trace->count);
++	for (unsigned int i = 0; i < n; i++) {
++		KUNIT_EXPECT_EQ(test, trace->opcode[first + i], run[i][0]);
++		KUNIT_EXPECT_EQ(test, trace->size[first + i], run[i][1]);
++	}
++}
++
++static void isp_test_temporal_filter_band0(struct kunit *test)
++{
++	static const u32 run[][2] = {
++		{ 0xc100, 0x18 }, { 0xc120, 0x10 }, { 0xc11c, 0x10 },
++		{ 0xc11d, 0x14 }, { 0xc102, 0x0c }, { 0xc113, 0x0c },
++	};
++	struct apple_isp *isp = isp_test_nv12_alloc(test, ISP_IMX958_2224_01);
++	struct isp_test_nv12_trace *trace;
++	int i;
++
++	trace = kunit_kzalloc(test, sizeof(*trace), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, trace);
++	test->priv = trace;
++	KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), 0);
++	isp_test_expect_run(test, trace, run, ARRAY_SIZE(run));
++	/* The start record is (1, 0, 0) whatever the DT property says. */
++	i = isp_test_find(trace, 0xc100);
++	KUNIT_EXPECT_EQ(test, trace->word[i][0], 1);
++	KUNIT_EXPECT_EQ(test, trace->word[i][1], 0);
++	KUNIT_EXPECT_EQ(test, trace->word[i][2], 0);
++	i = isp_test_find(trace, 0xc11d);
++	KUNIT_EXPECT_EQ(test, trace->word[i][0], 0x7800);
++	KUNIT_EXPECT_EQ(test, trace->word[i][1], 0x6400);
++	KUNIT_EXPECT_LT(test, isp_test_find(trace, 0xc114), 0);
++}
++
++static void isp_test_temporal_filter_off(struct kunit *test)
++{
++	static const u32 run[][2] = {
++		{ 0xc114, 0x0c }, { 0xc103, 0x0c }, { 0xc101, 0x0c },
++	};
++	struct apple_isp *isp = isp_test_nv12_alloc(test, ISP_IMX558_1925_03);
++	struct isp_test_nv12_trace *trace;
++
++	trace = kunit_kzalloc(test, sizeof(*trace), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, trace);
++	test->priv = trace;
++	KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), 0);
++	isp_test_expect_run(test, trace, run, ARRAY_SIZE(run));
++	KUNIT_EXPECT_LT(test, isp_test_find(trace, 0xc100), 0);
++	KUNIT_EXPECT_LT(test, isp_test_find(trace, 0xc102), 0);
++	KUNIT_EXPECT_LT(test, isp_test_find(trace, 0xc113), 0);
++}
++
++static void isp_test_power_line_frequency(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_nv12_alloc(test, ISP_IMX958_2224_01);
++	struct isp_test_nv12_trace *trace;
++	int i;
++
++	trace = kunit_kzalloc(test, sizeof(*trace), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, trace);
++	test->priv = trace;
++
++	/* No control: 50 Hz, in Hz 16.16 */
++	KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), 0);
++	i = isp_test_find(trace, 0x8212);
++	KUNIT_ASSERT_GE(test, i, 0);
++	KUNIT_EXPECT_EQ(test, trace->size[i], 0x10);
++	KUNIT_EXPECT_EQ(test, trace->word[i][0], 0x00320000);
++	/* After the tuning, before the sensor configuration is selected */
++	KUNIT_EXPECT_LT(test, i, isp_test_find(trace, 0x107));
++
++	isp->power_line_frequency =
++		v4l2_ctrl_new_std_menu(&isp->ctrl_handler, NULL,
++				       V4L2_CID_POWER_LINE_FREQUENCY,
++				       V4L2_CID_POWER_LINE_FREQUENCY_60HZ,
++				       BIT(V4L2_CID_POWER_LINE_FREQUENCY_DISABLED),
++				       V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
++	KUNIT_ASSERT_NOT_NULL(test, isp->power_line_frequency);
++	KUNIT_ASSERT_EQ(test, v4l2_ctrl_s_ctrl(isp->power_line_frequency,
++					       V4L2_CID_POWER_LINE_FREQUENCY_60HZ), 0);
++	memset(trace, 0, sizeof(*trace));
++	KUNIT_EXPECT_EQ(test, isp_ch_configure_capture(isp, 0), 0);
++	i = isp_test_find(trace, 0x8212);
++	KUNIT_ASSERT_GE(test, i, 0);
++	KUNIT_EXPECT_EQ(test, trace->word[i][0], 0x003c0000);
++}
++
++static int isp_test_config_reply(struct apple_isp *isp, void *args, u32 insize,
++				 u32 outsize, int timeout)
++{
++	struct kunit *test = kunit_get_current_test();
++	u32 *count = test->priv;
++	struct cmd_ch_camera_config_h17 *reply = isp->cmd_virt;
++	struct cmd_ch_camera_config *config = &reply->config;
++
++	KUNIT_EXPECT_EQ(test, insize, 0x120);
++	KUNIT_EXPECT_EQ(test, outsize, 0x120);
++	memcpy(reply, args, sizeof(*reply));
++	KUNIT_EXPECT_EQ(test, config->preset, (*count)++);
++	config->in_width = 1920;
++	config->in_height = 2160;
++	config->out_width = 1920;
++	config->out_height = 1080;
++	if (config->preset == 1) {
++		config->in_width = 4096;
++		config->in_height = 3072;
++		config->out_width = 4096;
++		config->out_height = 3072;
++	}
++	config->in_width2 = config->in_width;
++	config->in_height2 = config->in_height;
++	config->out_width2 = config->out_width;
++	config->out_height2 = config->out_height;
++	if (config->preset == 2)
++		config->out_height2 = 2160;
++	reply->unknown[sizeof(reply->unknown) - 1] = 0x5a;
++	return 0;
++}
++
++static void isp_test_free_configs(void *ptr)
++{
++	kfree(ptr);
++}
++
++static void isp_test_sensor_config_list(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_preset presets[] = {
++		{ .index = 5, .input_dim = {1920, 2160},
++		  .output_dim = {1920, 1080}, .crop_size = {1920, 1080} },
++		{ .index = 5, .input_dim = {1920, 2160},
++		  .output_dim = {1280, 720}, .crop_size = {1280, 720} },
++	};
++	u32 count = 0;
++	int err;
++
++	isp->cmd_virt = kunit_kzalloc(test, 0x120, GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, isp->cmd_virt);
++	isp->presets = presets;
++	isp->num_presets = ARRAY_SIZE(presets);
++	test->priv = &count;
++	kunit_activate_static_stub(test, isp_cmd_send, isp_test_config_reply);
++	KUNIT_ASSERT_EQ(test, isp_ch_cache_sensor_configs(isp, 0, 6), 0);
++	err = kunit_add_action_or_reset(test, isp_test_free_configs, isp->sensor_configs);
++	KUNIT_ASSERT_EQ(test, err, 0);
++	KUNIT_EXPECT_EQ(test, get_unaligned_le32(isp->sensor_configs[5].reply + 0xc), 5);
++	KUNIT_EXPECT_EQ(test, isp->sensor_configs[5].reply[ISP_SENSOR_CONFIG_SIZE - 1], 0x5a);
++	KUNIT_EXPECT_EQ(test, count, 6);
++	KUNIT_EXPECT_EQ(test, isp->num_sensor_configs, 6);
++	KUNIT_EXPECT_EQ(test, isp->num_presets, 3);
++	KUNIT_EXPECT_EQ(test, isp->presets[0].index, 5);
++	KUNIT_EXPECT_EQ(test, isp->presets[0].output_dim.y, 1080);
++	KUNIT_EXPECT_TRUE(test, isp->presets[1].p010);
++	KUNIT_EXPECT_TRUE(test, isp->presets[2].p010);
++	KUNIT_EXPECT_EQ(test, isp->presets[2].index, 1);
++	KUNIT_EXPECT_EQ(test, isp->presets[2].output_dim.x, 4096);
++	KUNIT_EXPECT_EQ(test, isp->presets[2].crop_size.y, 3072);
++	KUNIT_EXPECT_FALSE(test, isp->sensor_configs[2].usable);
++	KUNIT_EXPECT_EQ(test, isp_ch_cache_sensor_configs(isp, 0, 0), -EINVAL);
++	KUNIT_EXPECT_EQ(test, isp_ch_cache_sensor_configs(isp, 0, 65), -EINVAL);
++	KUNIT_EXPECT_EQ(test, count, 6);
++}
++
++static int isp_test_bad_config_reply(struct apple_isp *isp, void *args, u32 insize,
++				     u32 outsize, int timeout)
++{
++	struct cmd_ch_camera_config_h17 *reply = isp->cmd_virt;
++
++	isp_test_config_reply(isp, args, insize, outsize, timeout);
++	reply->config.preset = 65;
++	return 0;
++}
++
++static void isp_test_sensor_config_failure(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_preset preset = {};
++	u32 count = 0;
++
++	isp->cmd_virt = kunit_kzalloc(test, ISP_SENSOR_CONFIG_SIZE, GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, isp->cmd_virt);
++	isp->presets = &preset;
++	isp->num_presets = 1;
++	test->priv = &count;
++	kunit_activate_static_stub(test, isp_cmd_send, isp_test_bad_config_reply);
++	KUNIT_EXPECT_EQ(test, isp_ch_cache_sensor_configs(isp, 0, 6), -EIO);
++	KUNIT_EXPECT_EQ(test, count, 1);
++	KUNIT_EXPECT_EQ(test, isp->num_sensor_configs, 0);
++	KUNIT_EXPECT_PTR_EQ(test, isp->sensor_configs, NULL);
++	KUNIT_EXPECT_PTR_EQ(test, isp->presets, &preset);
++}
++
++struct isp_test_ack_state {
++	unsigned int fault, calls;
++};
++
++static int isp_test_ack_reply(struct apple_isp *isp, struct isp_channel *chan,
++			      unsigned long timeout)
++{
++	struct kunit *test = kunit_get_current_test();
++	struct isp_test_ack_state *state = test->priv;
++
++	state->calls++;
++	chan->rsp = (struct isp_message){ .arg0 = chan->req.arg0 | ISP_IPC_FLAG_ACK,
++					  .arg1 = chan->req.arg2 };
++	switch (state->fault) {
++	case 1:
++		chan->rsp.arg2 = 1;
++		break;
++	case 2:
++		put_unaligned_le32(1, isp->cmd_virt);
++		break;
++	case 3:
++		chan->rsp.arg1 += 4;
++		break;
++	case 4:
++		return -ETIME;
++	}
++	return 0;
++}
++
++static void isp_test_command_ack_failures(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_test_ack_state state = {};
++
++	isp->cmd_virt = kunit_kzalloc(test, 0x400, GFP_KERNEL);
++	isp->chan_io = kunit_kzalloc(test, sizeof(*isp->chan_io), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, isp->cmd_virt);
++	KUNIT_ASSERT_NOT_NULL(test, isp->chan_io);
++	isp->chan_io->name = "IO";
++	test->priv = &state;
++	kunit_deactivate_static_stub(test, isp_cmd_send);
++	kunit_activate_static_stub(test, ipc_chan_send, isp_test_ack_reply);
++	KUNIT_EXPECT_EQ(test, isp_cmd_ch_camera_config_select(isp, 0, 5), 0);
++	for (state.fault = 1; state.fault <= 4; state.fault++) {
++		unsigned int fault = state.fault;
++
++		state.calls = 0;
++		KUNIT_EXPECT_EQ(test, isp_cmd_ch_camera_config_select(isp, 0, 5),
++				fault == 4 ? -ETIME : -EIO);
++		/* A failed command does not take the next one with it. */
++		KUNIT_EXPECT_FALSE(test, isp->ipc_failed);
++		state.fault = 0;
++		KUNIT_EXPECT_EQ(test, isp_cmd_ch_camera_config_select(isp, 0, 5), 0);
++		KUNIT_EXPECT_EQ(test, state.calls, 2);
++		state.fault = fault;
++	}
++
++	/* Firmware that never answered gets no further command. */
++	isp->ipc_failed = true;
++	state.calls = 0;
++	KUNIT_EXPECT_EQ(test, isp_cmd_ch_camera_config_select(isp, 0, 5), -EIO);
++	KUNIT_EXPECT_EQ(test, state.calls, 0);
++}
++
++static void isp_test_call_crop(struct kunit *test)
++{
++	struct isp_preset source = {
++		.index = 7, .input_dim = { 1936, 1096 },
++		.output_dim = { 1920, 1080 }, .crop_offset = { 8, 8 },
++		.crop_size = { 1920, 1080 }, .p010 = true,
++	};
++	struct isp_preset result;
++
++	KUNIT_ASSERT_TRUE(test,
++			  isp_size_from_crop(&source, (struct coord){ 640, 480 }, &result));
++	KUNIT_EXPECT_EQ(test, result.index, 7);
++	KUNIT_EXPECT_TRUE(test, result.p010);
++	KUNIT_EXPECT_EQ(test, result.crop_offset.x, 248);
++	KUNIT_EXPECT_EQ(test, result.crop_offset.y, 8);
++	KUNIT_EXPECT_EQ(test, result.crop_size.x, 1440);
++	KUNIT_EXPECT_EQ(test, result.crop_size.y, 1080);
++	KUNIT_EXPECT_EQ(test, result.output_dim.x, 640);
++	KUNIT_EXPECT_EQ(test, result.output_dim.y, 480);
++}
++
++static void isp_test_call_crop_bounds(struct kunit *test)
++{
++	struct isp_preset source = {
++		.input_dim = { 1920, 2160 }, .output_dim = { 1920, 1080 },
++		.crop_size = { 1920, 1080 },
++	};
++	struct isp_preset result;
++	static const struct coord rejected[] = {
++		{ 1080, 1920 }, { 1760, 1328 }, { 1552, 1552 },
++		{ 1922, 1080 }, { 0, 480 }, { 641, 480 },
++	};
++
++	/* Stacked input rows do not make a portrait or a larger square. */
++	for (unsigned int i = 0; i < ARRAY_SIZE(rejected); i++)
++		KUNIT_EXPECT_FALSE(test, isp_size_from_crop(&source, rejected[i], &result));
++	source.crop_offset.x = 2;
++	KUNIT_EXPECT_FALSE(test,
++			   isp_size_from_crop(&source, (struct coord){ 640, 480 }, &result));
++	source.crop_offset.x = U32_MAX;
++	KUNIT_EXPECT_FALSE(test,
++			   isp_size_from_crop(&source, (struct coord){ 640, 480 }, &result));
++}
++
++static void isp_test_call_size_table(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_preset source = {
++		.index = 7, .input_dim = { 1920, 1920 },
++		.output_dim = { 1920, 1920 }, .crop_size = { 1920, 1920 },
++	};
++
++	isp->presets = &source;
++	isp->num_presets = 1;
++	KUNIT_ASSERT_EQ(test, isp_add_call_sizes(isp), 0);
++	KUNIT_EXPECT_EQ(test, isp->num_presets, ARRAY_SIZE(isp_call_sizes) + 1);
++	KUNIT_EXPECT_EQ(test, isp->presets[0].output_dim.x, 1920);
++	KUNIT_EXPECT_EQ(test, isp->presets[0].output_dim.y, 1920);
++	for (unsigned int i = 0; i < ARRAY_SIZE(isp_call_sizes); i++) {
++		struct isp_preset *preset = &isp->presets[i + 1];
++
++		KUNIT_EXPECT_EQ(test, preset->output_dim.x, isp_call_sizes[i].x);
++		KUNIT_EXPECT_EQ(test, preset->output_dim.y, isp_call_sizes[i].y);
++		KUNIT_EXPECT_EQ(test, preset->index, 7);
++		KUNIT_EXPECT_FALSE(test, preset->p010);
++		KUNIT_EXPECT_EQ(test, preset->crop_size.x * preset->output_dim.y,
++				preset->crop_size.y * preset->output_dim.x);
++		KUNIT_EXPECT_EQ(test, (preset->crop_offset.x | preset->crop_offset.y |
++				       preset->crop_size.x | preset->crop_size.y) & 1, 0);
++		KUNIT_EXPECT_LE(test, preset->crop_offset.x + preset->crop_size.x, 1920);
++		KUNIT_EXPECT_LE(test, preset->crop_offset.y + preset->crop_size.y, 1920);
++	}
++	/* Rebuilding preserves order and never duplicates an existing size. */
++	KUNIT_ASSERT_EQ(test, isp_add_call_sizes(isp), 0);
++	KUNIT_EXPECT_EQ(test, isp->num_presets, ARRAY_SIZE(isp_call_sizes) + 1);
++}
++
++static void isp_test_call_size_capabilities(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_capture_alloc(test);
++	struct isp_preset sources[] = {
++		{ .index = 5, .input_dim = { 1920, 2160 },
++		  .output_dim = { 1920, 1080 }, .crop_size = { 1920, 1080 }, .p010 = true },
++		{ .index = 5, .input_dim = { 1920, 2160 },
++		  .output_dim = { 1280, 720 }, .crop_size = { 1280, 720 }, .p010 = true },
++		{ .index = 9, .input_dim = { 1536, 3024 },
++		  .output_dim = { 1536, 3024 }, .crop_size = { 1536, 3024 }, .p010 = true },
++	};
++
++	isp->presets = sources;
++	isp->num_presets = ARRAY_SIZE(sources);
++	KUNIT_ASSERT_EQ(test, isp_add_call_sizes(isp), 0);
++	KUNIT_EXPECT_EQ(test, isp->num_presets, 9);
++	for (unsigned int i = 0; i < ARRAY_SIZE(sources); i++)
++		KUNIT_EXPECT_MEMEQ(test, &isp->presets[i], &sources[i], sizeof(sources[i]));
++	for (unsigned int i = ARRAY_SIZE(sources); i < isp->num_presets; i++) {
++		struct isp_preset *preset = &isp->presets[i];
++
++		KUNIT_EXPECT_TRUE(test, preset->p010);
++		KUNIT_EXPECT_FALSE(test, preset->output_dim.x == 1760 &&
++				   preset->output_dim.y == 1328);
++		KUNIT_EXPECT_FALSE(test, preset->output_dim.x == 1552 &&
++				   preset->output_dim.y == 1552);
++	}
++	KUNIT_EXPECT_EQ(test, isp->presets[8].output_dim.x, 1536);
++	KUNIT_EXPECT_EQ(test, isp->presets[8].output_dim.y, 1536);
++}
++
++static struct kunit_case isp_cam_test_cases[] = {
++	KUNIT_CASE(isp_test_call_crop),
++	KUNIT_CASE(isp_test_call_crop_bounds),
++	KUNIT_CASE(isp_test_call_size_table),
++	KUNIT_CASE(isp_test_call_size_capabilities),
++	KUNIT_CASE(isp_test_setfile_failure_stops_setup),
++	KUNIT_CASE(isp_test_optional_setfile_continues_setup),
++	KUNIT_CASE(isp_test_command_ack_failures),
++	KUNIT_CASE(isp_test_sensor_geometry),
++	KUNIT_CASE(isp_test_sensor_config_list),
++	KUNIT_CASE(isp_test_sensor_config_failure),
++	KUNIT_CASE(isp_test_preview_stream),
++	KUNIT_CASE(isp_test_preview_command_failures),
++	KUNIT_CASE(isp_test_temporal_filter_band0),
++	KUNIT_CASE(isp_test_temporal_filter_off),
++	KUNIT_CASE(isp_test_power_line_frequency),
++	{}
++};
++
++static struct kunit_suite isp_cam_test_suite = {
++	.name = "apple-isp-camera",
++	.test_cases = isp_cam_test_cases,
++};
++
++kunit_test_suite(isp_cam_test_suite);
+diff --git a/drivers/media/platform/apple/isp/isp-cam.c b/drivers/media/platform/apple/isp/isp-cam.c
+index 5090ed2ed5b985cc509bcfed6aa4e9ae4a4eb847..4b096aa29dddfde13453863b00d4c7e96fb8b303 100644
+--- a/drivers/media/platform/apple/isp/isp-cam.c
++++ b/drivers/media/platform/apple/isp/isp-cam.c
+@@ -2,15 +2,28 @@
+ /* Copyright 2023 Eileen Yoon <eyn@gmx.com> */
+ 
+ #include <linux/firmware.h>
++#include <linux/gcd.h>
+ #include <linux/unaligned.h>
++#include <kunit/static_stub.h>
+ 
+ #include "isp-cam.h"
+ #include "isp-cmd.h"
+ #include "isp-fw.h"
+ #include "isp-iommu.h"
++#include "isp-ipc.h"
+ #include "isp-regs.h"
+ 
+-#define ISP_MAX_PRESETS 32
++/*
++ * How the ISP's own temporal noise filter is set up for a sensor. macOS
++ * picks this per sensor on the H17 interface: the IMX558 (J700) runs
++ * without it and the IMX958 (J616s) runs it with explicit strength
++ * controls. Everything else keeps the original start sequence.
++ */
++enum isp_temporal_filter {
++	ISP_TEMPORAL_FILTER_START,
++	ISP_TEMPORAL_FILTER_OFF,
++	ISP_TEMPORAL_FILTER_BAND0,
++};
+ 
+ struct isp_setfile {
+ 	u32 version;
+@@ -19,6 +32,7 @@ struct isp_setfile {
+ 	size_t size;
+ 	/* bytes present in the file if fewer than size; the rest is zero */
+ 	size_t file_size;
++	enum isp_temporal_filter temporal_filter;
+ };
+ 
+ // clang-format off
+@@ -48,7 +62,8 @@ static const struct isp_setfile isp_setfiles[] = {
+ 	[ISP_IMX514_2820_04] = {0x514, 0x28200405, "apple/isp_2820_04XX.dat", 0xa198},
+ 	[ISP_IMX558_1921_01] = {0x558, 0x19210106, "apple/isp_1921_01XX.dat", 0xad40},
+ 	[ISP_IMX558_1922_02] = {0x558, 0x19220201, "apple/isp_1922_02XX.dat", 0xad40},
+-	[ISP_IMX558_1925_03] = {0x558, 0x19250306, "apple/isp_1925_03XX.dat", 0xcbc0, 0xcba6},
++	[ISP_IMX558_1925_03] = {0x558, 0x19250306, "apple/isp_1925_03XX.dat", 0xcbc0, 0xcba6,
++				ISP_TEMPORAL_FILTER_OFF},
+ 	[ISP_IMX603_7920_01] = {0x603, 0x79200109, "apple/isp_7920_01XX.dat", 0xad2c},
+ 	[ISP_IMX603_7920_02] = {0x603, 0x79200205, "apple/isp_7920_02XX.dat", 0xad2c},
+ 	[ISP_IMX603_7921_01] = {0x603, 0x79210104, "apple/isp_7921_01XX.dat", 0xad90},
+@@ -70,6 +85,8 @@ static const struct isp_setfile isp_setfiles[] = {
+ 	[ISP_IMX814_2123_01] = {0x814, 0x21230101, "apple/isp_2123_01XX.dat", 0xed54},
+ 	[ISP_IMX853_7622_01] = {0x853, 0x76220112, "apple/isp_7622_01XX.dat", 0x247f8},
+ 	[ISP_IMX913_7523_01] = {0x913, 0x75230107, "apple/isp_7523_01XX.dat", 0x247f8},
++	[ISP_IMX958_2224_01] = {0x958, 0x22240106, "apple/isp_2224_01XX.dat", 0x6ff4, 0,
++				ISP_TEMPORAL_FILTER_BAND0},
+ 	[ISP_VD56G0_6221_01] = {0xd56, 0x62210102, "apple/isp_6221_01XX.dat", 0x1b80},
+ 	[ISP_VD56G0_6222_01] = {0xd56, 0x62220102, "apple/isp_6222_01XX.dat", 0x1b80},
+ };
+@@ -158,6 +175,10 @@ static int isp_ch_get_sensor_id(struct apple_isp *isp, u32 ch)
+ 	case 0x913:
+ 		id = ISP_IMX913_7523_01;
+ 		break;
++	case 0x958:
++		/* Section 0x50f of 2224 names sensor 0x958; 2924's names 0x614. */
++		id = ISP_IMX958_2224_01;
++		break;
+ 	case 0xd56:
+ 		id = ISP_VD56G0_6221_01;
+ 		break;
+@@ -188,6 +209,23 @@ static int isp_check_presets(struct apple_isp *isp, u32 num_fw_presets)
+ 	if (!num_fw_presets)
+ 		return 0;
+ 
++	/*
++	 * A deferred start detects the camera after the presets were
++	 * advertised: keep them, and refuse a stream on one the firmware
++	 * lacks instead.
++	 */
++	if (isp->hw->deferred_start) {
++		isp->num_fw_presets = num_fw_presets;
++		for (int i = 0; i < isp->num_presets; i++)
++			if (isp->presets[i].index >= num_fw_presets)
++				dev_warn(isp->dev,
++					 "%ux%u preset: config %u, firmware has %u\n",
++					 isp->presets[i].output_dim.x,
++					 isp->presets[i].output_dim.y,
++					 isp->presets[i].index, num_fw_presets);
++		return 0;
++	}
++
+ 	for (int i = 0; i < isp->num_presets; i++) {
+ 		struct isp_preset *preset = &isp->presets[i];
+ 
+@@ -212,6 +250,225 @@ static int isp_check_presets(struct apple_isp *isp, u32 num_fw_presets)
+ 	return 0;
+ }
+ 
++/* Do not mistake stacked sensor input rows for a processed output mode. */
++static bool isp_sensor_config_usable(const struct cmd_ch_camera_config *config)
++{
++	return config->in_width && config->in_height &&
++	       config->out_width && config->out_height &&
++	       config->out_width <= 16384 && config->out_height <= 16384 &&
++	       !(config->out_width & 1) && !(config->out_height & 1) &&
++	       config->out_width <= config->in_width &&
++	       config->out_height <= config->in_height &&
++	       config->in_width == config->in_width2 &&
++	       config->in_height == config->in_height2 &&
++	       config->out_width == config->out_width2 &&
++	       config->out_height == config->out_height2;
++}
++
++static int isp_ch_cache_sensor_configs(struct apple_isp *isp, u32 ch, u32 count)
++{
++	struct cmd_ch_camera_config_h17 args;
++	struct isp_sensor_config *configs;
++	struct isp_preset *presets;
++	unsigned int num = isp->num_presets;
++	int err;
++
++	/* The extended reply is established only for the IMX958 T6040 path. */
++	if (!isp_supports_p010(isp))
++		return 0;
++	if (!count || count > ISP_MAX_SENSOR_CONFIGS)
++		return -EINVAL;
++
++	presets = devm_kcalloc(isp->dev, num + count, sizeof(*presets), GFP_KERNEL);
++	if (!presets)
++		return -ENOMEM;
++	memcpy(presets, isp->presets, num * sizeof(*presets));
++	configs = kcalloc(count, sizeof(*configs), GFP_KERNEL);
++	if (!configs)
++		return -ENOMEM;
++
++	for (u32 i = 0; i < count; i++) {
++		struct cmd_ch_camera_config *config = &args.config;
++		struct isp_sensor_config *cached = &configs[i];
++		bool duplicate = false;
++
++		err = isp_cmd_ch_camera_config_get(isp, ch, i, &args);
++		if (err)
++			goto free_configs;
++		if (config->opcode != (u64)CISP_CMD_CH_CAMERA_CONFIG_GET << 32 ||
++		    config->chan != ch || config->preset != i) {
++			err = -EIO;
++			goto free_configs;
++		}
++
++		memcpy(cached->reply, &args, sizeof(args));
++		cached->input_dim = (struct coord){config->in_width, config->in_height};
++		cached->output_dim = (struct coord){config->out_width, config->out_height};
++		cached->sensor_clk = config->sensor_clk;
++		cached->usable = isp_sensor_config_usable(config);
++		dev_dbg(isp->dev, "sensor config %u: input %ux%u output %ux%u clock %u%s\n",
++			i, config->in_width, config->in_height,
++			config->out_width, config->out_height, config->sensor_clk,
++			cached->usable ? "" : " (unverified geometry)");
++		print_hex_dump_debug("apple-isp config: ", DUMP_PREFIX_OFFSET,
++				     16, 4, &args, sizeof(args), false);
++		/* Both processed preview sizes are recorded in the proxy source. */
++		for (unsigned int j = 0; j < num; j++) {
++			struct isp_preset *preset = &presets[j];
++			bool preview = i == 5 && config->in_width == 1920 &&
++				       config->in_height == 2160 &&
++				       ((preset->output_dim.x == 1280 &&
++					 preset->output_dim.y == 720) ||
++					(preset->output_dim.x == 1920 &&
++					 preset->output_dim.y == 1080));
++			bool reported = cached->usable &&
++				preset->output_dim.x == config->out_width &&
++				preset->output_dim.y == config->out_height;
++
++			if (preset->index == i &&
++			    preset->input_dim.x == config->in_width &&
++			    preset->input_dim.y == config->in_height &&
++			    !preset->crop_offset.x && !preset->crop_offset.y &&
++			    /* Same aspect ratio, never enlarged: the scaler may shrink it. */
++			    preset->crop_size.x >= preset->output_dim.x &&
++			    preset->crop_size.x * preset->output_dim.y ==
++			    preset->crop_size.y * preset->output_dim.x)
++				preset->p010 = preview || reported;
++		}
++		if (!cached->usable)
++			continue;
++
++		/* Keep the board's config-5 presets, including the default, first. */
++		for (unsigned int j = 0; j < num; j++) {
++			if (presets[j].output_dim.x == config->out_width &&
++			    presets[j].output_dim.y == config->out_height) {
++				duplicate = true;
++				break;
++			}
++		}
++		if (duplicate)
++			continue;
++
++		presets[num++] = (struct isp_preset){
++			.index = i,
++			.input_dim = cached->input_dim,
++			.output_dim = cached->output_dim,
++			.crop_size = cached->output_dim,
++			.p010 = true,
++		};
++	}
++	isp->sensor_configs = configs;
++	isp->num_sensor_configs = count;
++	isp->presets = presets;
++	isp->num_presets = num;
++	return 0;
++
++free_configs:
++	kfree(configs);
++	return err;
++}
++
++/* Common call sizes, offered only when a known processed crop contains them. */
++static const struct coord isp_call_sizes[] = {
++	{ 640, 480 }, { 1280, 720 }, { 1920, 1080 }, { 1080, 1920 },
++	{ 1760, 1328 }, { 1328, 1760 }, { 1552, 1552 },
++	{ 1280, 960 }, { 960, 1280 },
++};
++
++/*
++ * CH_CROP[_SCL1]_SET takes x/y/width/height independently of the output
++ * dimensions in CH_OUTPUT_CONFIG[_SCL1]_SET. Stay within an established
++ * processed crop, rather than the sensor input (which may contain stacked
++ * rows). Use the largest exact-aspect crop, centred on the chroma grid,
++ * with no upscaling. Neither command reports a scaler limit or rotation.
++ */
++static bool isp_size_from_crop(const struct isp_preset *source,
++			       struct coord size, struct isp_preset *preset)
++{
++	u32 divisor, x, y, scale;
++
++	if (!size.x || !size.y || (size.x | size.y) & 1 ||
++	    !source->crop_size.x || !source->crop_size.y ||
++	    (source->crop_offset.x | source->crop_offset.y) & 1 ||
++	    source->crop_size.x > 16384 || source->crop_size.y > 16384 ||
++	    source->crop_offset.x > source->input_dim.x ||
++	    source->crop_size.x > source->input_dim.x - source->crop_offset.x ||
++	    source->crop_offset.y > source->input_dim.y ||
++	    source->crop_size.y > source->input_dim.y - source->crop_offset.y)
++		return false;
++
++	divisor = gcd(size.x, size.y);
++	x = size.x / divisor;
++	y = size.y / divisor;
++	scale = round_down(min(source->crop_size.x / x,
++			       source->crop_size.y / y), 2);
++	if (scale < divisor)
++		return false;
++
++	*preset = *source;
++	preset->output_dim = size;
++	preset->crop_size = (struct coord){ x * scale, y * scale };
++	preset->crop_offset.x += round_down((source->crop_size.x - x * scale) / 2, 2);
++	preset->crop_offset.y += round_down((source->crop_size.y - y * scale) / 2, 2);
++	return true;
++}
++
++static unsigned int isp_append_size(struct isp_preset *presets, unsigned int num,
++				    unsigned int sources, struct coord size)
++{
++	struct isp_preset candidate, best;
++	u32 area, best_area = 0;
++
++	for (unsigned int i = 0; i < num; i++)
++		if (presets[i].output_dim.x == size.x &&
++		    presets[i].output_dim.y == size.y)
++			return num;
++
++	/* Never use a generated size as evidence for another generated size. */
++	for (unsigned int i = 0; i < sources; i++) {
++		if (!isp_size_from_crop(&presets[i], size, &candidate))
++			continue;
++		area = candidate.crop_size.x * candidate.crop_size.y;
++		if (area > best_area) {
++			best = candidate;
++			best_area = area;
++		}
++	}
++	if (best_area)
++		presets[num++] = best;
++	return num;
++}
++
++static int isp_add_call_sizes(struct apple_isp *isp)
++{
++	unsigned int sources = isp->num_presets, num = sources;
++	struct isp_preset *presets;
++	struct isp_preset candidate;
++	u32 square = 0;
++
++	presets = devm_kcalloc(isp->dev, sources + ARRAY_SIZE(isp_call_sizes) + 1,
++			       sizeof(*presets), GFP_KERNEL);
++	if (!presets)
++		return -ENOMEM;
++	memcpy(presets, isp->presets, sources * sizeof(*presets));
++
++	for (unsigned int i = 0; i < ARRAY_SIZE(isp_call_sizes); i++)
++		num = isp_append_size(presets, num, sources, isp_call_sizes[i]);
++
++	/* A smaller sensor can still offer a square without enlarging pixels. */
++	for (unsigned int i = 0; i < sources; i++) {
++		u32 side = round_down(min(presets[i].crop_size.x,
++					  presets[i].crop_size.y), 2);
++
++		if (isp_size_from_crop(&presets[i], (struct coord){ side, side }, &candidate))
++			square = max(square, side);
++	}
++	num = isp_append_size(presets, num, sources, (struct coord){ square, square });
++	isp->presets = presets;
++	isp->num_presets = num;
++	return 0;
++}
++
+ static int isp_ch_cache_sensor_info(struct apple_isp *isp, u32 ch)
+ {
+ 	struct isp_format *fmt = isp_get_format(isp, ch);
+@@ -228,10 +485,14 @@ static int isp_ch_cache_sensor_info(struct apple_isp *isp, u32 ch)
+ 
+ 	dev_dbg(isp->dev, "found sensor %x on ch %d\n", args->version, ch);
+ 
+-	/* The metadata buffers are allocated for the sizes the driver knows. */
++	/*
++	 * The metadata buffers are allocated for the sizes the driver knows;
++	 * without a capture metadata pool its size is not used.
++	 */
+ 	if (isp->hw->fw_abi == ISP_FW_ABI_H17 &&
+ 	    (args->unk_68 != isp->hw->meta_size ||
+-	     args->unk_78 != isp->hw->capture_meta_size)) {
++	     (isp->hw->capture_meta_size &&
++	      args->unk_78 != isp->hw->capture_meta_size))) {
+ 		dev_err(isp->dev,
+ 			"metadata sizes 0x%x/0x%x, expected 0x%x/0x%x\n",
+ 			args->unk_68, args->unk_78, isp->hw->meta_size,
+@@ -245,7 +506,8 @@ static int isp_ch_cache_sensor_info(struct apple_isp *isp, u32 ch)
+ 	err = isp_ch_get_sensor_id(isp, ch);
+ 	if (err ||
+ 	    (fmt->id != ISP_IMX248_1820_01 && fmt->id != ISP_IMX558_1921_01 &&
+-	     fmt->id != ISP_IMX558_1925_03 && fmt->id != ISP_IMX364_8720_01)) {
++	     fmt->id != ISP_IMX558_1925_03 && fmt->id != ISP_IMX364_8720_01 &&
++	     fmt->id != ISP_IMX958_2224_01)) {
+ 		dev_err(isp->dev,
+ 			"ch %d: unsupported sensor. Please file a bug report with hardware info & dmesg trace.\n",
+ 			ch);
+@@ -254,6 +516,10 @@ static int isp_ch_cache_sensor_info(struct apple_isp *isp, u32 ch)
+ 	}
+ 
+ 	err = isp_check_presets(isp, args->num_presets);
++	if (!err)
++		err = isp_ch_cache_sensor_configs(isp, ch, args->num_presets);
++	if (!err)
++		err = isp_add_call_sizes(isp);
+ 
+ exit:
+ 	kfree(args);
+@@ -311,8 +577,12 @@ int apple_isp_detect_camera(struct apple_isp *isp)
+ 		dev_err(isp->dev,
+ 			"failed to boot firmware for initial sensor detection: %d\n",
+ 			err);
+-		/* Resident firmware would fail a deferred retry the same way. */
+-		return isp->hw->resident_fw ? err : -EPROBE_DEFER;
++		/*
++		 * Resident firmware would fail a deferred retry the same way,
++		 * and a deferred start is not a probe to defer.
++		 */
++		return isp->hw->resident_fw || isp->hw->deferred_start ?
++		       err : -EPROBE_DEFER;
+ 	}
+ 
+ 	err = isp_detect_camera(isp);
+@@ -321,6 +591,8 @@ int apple_isp_detect_camera(struct apple_isp *isp)
+ 	if (isp->hw->resident_fw) {
+ 		if (err)
+ 			apple_isp_firmware_halt(isp);
++		else
++			isp->camera_detected = true;
+ 		return err;
+ 	}
+ 
+@@ -331,9 +603,54 @@ int apple_isp_detect_camera(struct apple_isp *isp)
+ 
+ 	apple_isp_firmware_shutdown(isp);
+ 
++	if (!err)
++		isp->camera_detected = true;
+ 	return err;
+ }
+ 
++/*
++ * A setfile is a chain of { le32 size, le32 0, le32 tag, payload } sections
++ * from 0x14 on, size counting what follows it. The lens shading sections
++ * hold 18-byte table records after a 10-byte header: { ?, 0x20, 0x20,
++ * offset lo, offset hi, 0, 0, width, height }. The xx24 setfiles keep the
++ * row stride (2 * width) in "offset hi"; the H17 firmware reads it as the
++ * offset's high half ("baseHi") and faults far past the file. Their xx25
++ * twins are the same tables with it zeroed, as macOS hands them over.
++ */
++static void isp_setfile_fixup_h17(void *data, size_t len)
++{
++	size_t off = 0x14;
++
++	while (off + 12 <= len) {
++		u32 size = get_unaligned_le32(data + off);
++		size_t end = off + 4 + size;
++		size_t rec;
++		int i;
++
++		if (size < 8 || end > len)
++			break;
++
++		switch (get_unaligned_le32(data + off + 8)) {
++		case 0xc003:
++		case 0xc01b:
++		case 0xc01c:
++		case 0xc01f:
++		case 0xc021:
++			rec = off + 12 + 10;
++			for (i = 0; i < 16 && rec + 18 <= end; i++, rec += 18) {
++				if (get_unaligned_le16(data + rec + 2) != 0x20 ||
++				    get_unaligned_le16(data + rec + 4) != 0x20)
++					break;
++				if (get_unaligned_le16(data + rec + 8) ==
++				    2 * get_unaligned_le16(data + rec + 14))
++					put_unaligned_le16(0, data + rec + 8);
++			}
++			break;
++		}
++		off = end;
++	}
++}
++
+ static int isp_ch_load_setfile(struct apple_isp *isp, u32 ch)
+ {
+ 	struct isp_format *fmt = isp_get_format(isp, ch);
+@@ -343,14 +660,20 @@ static int isp_ch_load_setfile(struct apple_isp *isp, u32 ch)
+ 	u32 magic;
+ 	int err;
+ 
++	KUNIT_STATIC_STUB_REDIRECT(isp_ch_load_setfile, isp, ch);
++
+ 	if (WARN_ON_ONCE(setfile->size > isp->data_surf->size))
+ 		return -ENOSPC;
+ 
+ 	err = firmware_request_nowarn(&fw, setfile->path, isp->dev);
+ 	if (err) {
+-		dev_warn_once(isp->dev,
+-			      "setfile '%s' not loaded (%d), streaming without calibration\n",
+-			      setfile->path, err);
++		if (err == -ENOENT)
++			dev_warn_once(isp->dev,
++				      "setfile '%s' missing, streaming without sensor tuning\n",
++				      setfile->path);
++		else
++			dev_err(isp->dev, "failed to read setfile '%s': %d\n",
++				setfile->path, err);
+ 		return err;
+ 	}
+ 
+@@ -372,9 +695,20 @@ static int isp_ch_load_setfile(struct apple_isp *isp, u32 ch)
+ 	memcpy(isp->data_surf->virt, fw->data, len);
+ 	memset(isp->data_surf->virt + len, 0, setfile->size - len);
+ 	release_firmware(fw);
++	/* Seen on T6040 only; T8140 runs its setfiles as they are. */
++	if (isp->hw->gen == ISP_GEN_T6040 || isp->hw->setfile_stride_fixup)
++		isp_setfile_fixup_h17(isp->data_surf->virt, len);
+ 
+-	return isp_cmd_ch_set_file_load(isp, ch, isp->data_surf->iova,
+-					setfile->size);
++	err = isp_cmd_ch_set_file_load(isp, ch, isp->data_surf->iova,
++				       setfile->size);
++	if (err)
++		dev_err(isp->dev, "ch %u: setfile '%s' load failed: %d\n",
++			ch, setfile->path, err);
++	else
++		dev_dbg(isp->dev, "ch %u: loaded sensor tuning '%s' (0x%zx bytes)\n",
++			ch, setfile->path, setfile->size);
++
++	return err;
+ }
+ 
+ static int isp_ch_configure_frame_rate(struct apple_isp *isp, u32 ch)
+@@ -397,6 +731,80 @@ static int isp_ch_configure_frame_rate(struct apple_isp *isp, u32 ch)
+ 	return isp_cmd_ch_ae_frame_rate_min_set(isp, ch, min_rate);
+ }
+ 
++/*
++ * Tell auto exposure the mains frequency, so that it picks exposure times
++ * that do not beat with lights on that supply. The firmware takes it in Hz,
++ * 16.16 fixed point. macOS sends it on the H17 interface for every camera.
++ */
++static int isp_ch_configure_power_line(struct apple_isp *isp, u32 ch)
++{
++	u32 hz = 50;
++
++	if (isp->hw->fw_abi != ISP_FW_ABI_H17)
++		return 0;
++
++	if (isp->power_line_frequency &&
++	    v4l2_ctrl_g_ctrl(isp->power_line_frequency) ==
++		    V4L2_CID_POWER_LINE_FREQUENCY_60HZ)
++		hz = 60;
++
++	return isp_cmd_apple_ch_ae_flicker_freq_update_current_set(isp, ch,
++								    hz << 16);
++}
++
++static int isp_ch_configure_temporal_filter(struct apple_isp *isp, u32 ch)
++{
++	struct isp_format *fmt = isp_get_format(isp, ch);
++	int err;
++
++	switch (isp_setfiles[fmt->id].temporal_filter) {
++	case ISP_TEMPORAL_FILTER_OFF:
++		/* The firmware keeps its state between streams; stop it. */
++		err = isp_cmd_apple_ch_temporal_filter_disable(isp, ch);
++		if (err)
++			return err;
++
++		err = isp_cmd_apple_ch_motion_history_stop(isp, ch);
++		if (err)
++			return err;
++
++		return isp_cmd_apple_ch_temporal_filter_stop(isp, ch);
++
++	case ISP_TEMPORAL_FILTER_BAND0:
++		err = isp_cmd_apple_ch_tnr_start_h17(isp, ch);
++		if (err)
++			return err;
++
++		err = isp_cmd_apple_ch_tnr_high_strength_set(isp, ch, 0);
++		if (err)
++			return err;
++
++		err = isp_cmd_apple_ch_tnr_band0_mod_set(isp, ch, 0);
++		if (err)
++			return err;
++
++		/* 120 and 100, in 1/256 steps */
++		err = isp_cmd_apple_ch_tnr_band0_threshold_set(isp, ch, 120 << 8,
++							       100 << 8);
++		if (err)
++			return err;
++		break;
++
++	default:
++		err = isp_cmd_apple_ch_temporal_filter_start(isp, ch,
++							     isp->temporal_filter);
++		if (err)
++			return err;
++		break;
++	}
++
++	err = isp_cmd_apple_ch_motion_history_start(isp, ch);
++	if (err)
++		return err;
++
++	return isp_cmd_apple_ch_temporal_filter_enable(isp, ch);
++}
++
+ static int isp_ch_configure_pools(struct apple_isp *isp, u32 ch)
+ {
+ 	struct isp_format *fmt = isp_get_format(isp, ch);
+@@ -406,17 +814,20 @@ static int isp_ch_configure_pools(struct apple_isp *isp, u32 ch)
+ 	if (err)
+ 		return err;
+ 
+-	err = isp_cmd_ch_buffer_pool_config_set(isp, ch,
+-						CISP_POOL_TYPE_META_CAPTURE);
+-	if (err)
+-		return err;
++	/* H17 firmware without capture metadata has no such pool. */
++	if (isp->hw->fw_abi != ISP_FW_ABI_H17 || isp->hw->capture_meta_size) {
++		err = isp_cmd_ch_buffer_pool_config_set(isp, ch,
++							CISP_POOL_TYPE_META_CAPTURE);
++		if (err)
++			return err;
++	}
+ 
+ 	/* The H17 firmware also takes the geometry of the output buffers. */
+ 	if (isp->hw->fw_abi != ISP_FW_ABI_H17)
+ 		return 0;
+ 
+ 	return isp_cmd_ch_buffer_pool_config_set_rendered(isp, ch,
+-							  ISP_MAX_BUFFERS,
++							  isp_num_rendered(isp),
+ 							  fmt->plane_size[0],
+ 							  fmt->strides[0],
+ 							  fmt->plane_size[1],
+@@ -429,14 +840,21 @@ static int isp_ch_configure_capture(struct apple_isp *isp, u32 ch)
+ 	bool h17 = isp->hw->fw_abi == ISP_FW_ABI_H17;
+ 	int err;
+ 
+-	isp_cmd_flicker_sensor_set(isp, 0);
++	err = isp_cmd_flicker_sensor_set(isp, 0);
++	if (isp_is_p010(isp) && err)
++		return err;
++
++	/* The proxy-qualified P010 route uses the firmware defaults. */
++	if (isp_is_p010(isp))
++		goto select_config;
+ 
+ 	/*
+-	 * The setfile isn't requisite but then we don't get calibration. If
+-	 * loading it was interrupted by a signal, give up on the stream.
++	 * Missing sensor tuning is optional. A present but invalid setfile or
++	 * a failed firmware upload must not silently select firmware defaults.
++	 * This model-wide tuning is separate from per-module factory data.
+ 	 */
+ 	err = isp_ch_load_setfile(isp, ch);
+-	if (err == -EINTR)
++	if (err && err != -ENOENT)
+ 		return err;
+ 
+ 	if (isp->hw->lpdp) {
+@@ -445,6 +863,11 @@ static int isp_ch_configure_capture(struct apple_isp *isp, u32 ch)
+ 			return err;
+ 	}
+ 
++	err = isp_ch_configure_power_line(isp, ch);
++	if (err)
++		return err;
++
++select_config:
+ 	err = isp_cmd_ch_sbs_enable(isp, ch, 1);
+ 	if (err)
+ 		return err;
+@@ -472,7 +895,8 @@ static int isp_ch_configure_capture(struct apple_isp *isp, u32 ch)
+ 	err = isp_cmd_ch_output_config_set(isp, ch, fmt->preset->output_dim.x,
+ 					   fmt->preset->output_dim.y,
+ 					   fmt->strides, CISP_COLORSPACE_REC709,
+-					   CISP_OUTPUT_FORMAT_YUV_2PLANE);
++					   isp_is_p010(isp) ? CISP_OUTPUT_FORMAT_P010 :
++							      CISP_OUTPUT_FORMAT_YUV_2PLANE);
+ 	if (err)
+ 		return err;
+ 
+@@ -500,6 +924,9 @@ static int isp_ch_configure_capture(struct apple_isp *isp, u32 ch)
+ 	if (err)
+ 		return err;
+ 
++	if (isp_is_p010(isp))
++		return isp_cmd_ch_master_slave_sync_mode_set(isp, ch, 0);
++
+ 	err = isp_cmd_ch_cnr_start(isp, ch);
+ 	if (err)
+ 		return err;
+@@ -538,15 +965,7 @@ static int isp_ch_configure_capture(struct apple_isp *isp, u32 ch)
+ 			return err;
+ 	}
+ 
+-	err = isp_cmd_apple_ch_temporal_filter_start(isp, ch, isp->temporal_filter);
+-	if (err)
+-		return err;
+-
+-	err = isp_cmd_apple_ch_motion_history_start(isp, ch);
+-	if (err)
+-		return err;
+-
+-	err = isp_cmd_apple_ch_temporal_filter_enable(isp, ch);
++	err = isp_ch_configure_temporal_filter(isp, ch);
+ 	if (err)
+ 		return err;
+ 
+@@ -563,18 +982,38 @@ static int isp_configure_capture(struct apple_isp *isp)
+ 
+ int apple_isp_start_camera(struct apple_isp *isp)
+ {
++	struct isp_format *fmt = isp_get_current_format(isp);
+ 	int err;
+ 
++	/*
++	 * A deferred start detects the camera now. Resident firmware is then
++	 * left running; firmware that starts again is stopped after the
++	 * detection like at probe, and booted again here.
++	 */
++	if (isp->hw->deferred_start && !isp->camera_detected) {
++		err = apple_isp_detect_camera(isp);
++		if (err < 0) {
++			dev_err(isp->dev, "failed to detect the camera: %d\n", err);
++			return err;
++		}
++	}
+ 	err = apple_isp_firmware_boot(isp);
+ 	if (err < 0) {
+ 		dev_err(isp->dev, "failed to boot firmware: %d\n", err);
+ 		return err;
+ 	}
+ 
++	if (isp->num_fw_presets && fmt->preset->index >= isp->num_fw_presets) {
++		dev_err(isp->dev, "preset config %u: firmware has %u\n",
++			fmt->preset->index, isp->num_fw_presets);
++		apple_isp_firmware_shutdown(isp);
++		return -EINVAL;
++	}
++
+ 	err = isp_configure_capture(isp);
+ 	if (err) {
+ 		dev_err(isp->dev, "failed to configure capture: %d\n", err);
+-		apple_isp_firmware_shutdown(isp);
++		apple_isp_stop_camera(isp);
+ 		return err;
+ 	}
+ 
+@@ -583,7 +1022,15 @@ int apple_isp_start_camera(struct apple_isp *isp)
+ 
+ void apple_isp_stop_camera(struct apple_isp *isp)
+ {
+-	apple_isp_firmware_shutdown(isp);
++	/*
++	 * A timed-out request is resolved before anything the firmware may
++	 * still use for it is released. Firmware that does not answer even
++	 * late is stopped first.
++	 */
++	if (isp_ipc_resync(isp))
++		apple_isp_firmware_halt(isp);
++	else
++		apple_isp_firmware_shutdown(isp);
+ }
+ 
+ /*
+@@ -655,9 +1102,15 @@ int apple_isp_start_capture(struct apple_isp *isp)
+ 
+ void apple_isp_stop_capture(struct apple_isp *isp)
+ {
++	if (isp->ipc_failed || isp->fw_state == ISP_FW_DEAD)
++		return;
+ 	isp_cmd_ch_stop(isp, 0); // TODO channel mask
+ 	isp_cmd_ch_buffer_return(isp, isp->current_ch);
+ 
+ 	/* ... until its buffers are back. */
+ 	apple_isp_wdt_stop(isp);
+ }
++
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++#include "isp-cam-test.c"
++#endif
+diff --git a/drivers/media/platform/apple/isp/isp-cmd.c b/drivers/media/platform/apple/isp/isp-cmd.c
+index 42c448fd0f30ce5763e2509117325c16c369053b..75b8704ccedcc3c1ecdef04d1e59915909185c3a 100644
+--- a/drivers/media/platform/apple/isp/isp-cmd.c
++++ b/drivers/media/platform/apple/isp/isp-cmd.c
+@@ -5,30 +5,58 @@
+ #include "isp-drv.h"
+ #include "isp-iommu.h"
+ #include "isp-ipc.h"
++#include <linux/unaligned.h>
++
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++#include <kunit/static_stub.h>
++#endif
+ 
+ #define CISP_OPCODE_SHIFT     32UL
+ #define CISP_OPCODE(x)	      (((u64)(x)) << CISP_OPCODE_SHIFT)
+ #define CISP_OPCODE_GET(x)    (((u64)(x)) >> CISP_OPCODE_SHIFT)
+ 
+ #define CISP_TIMEOUT	      msecs_to_jiffies(3000)
+-#define CISP_SEND_IN(x, a)    (cisp_send((x), &(a), sizeof(a), 0, CISP_TIMEOUT))
+-#define CISP_SEND_INOUT(x, a) (cisp_send((x), &(a), sizeof(a), sizeof(a), CISP_TIMEOUT))
++#define CISP_SEND_IN(x, a)    (isp_cmd_send((x), &(a), sizeof(a), 0, CISP_TIMEOUT))
++#define CISP_SEND_INOUT(x, a) (isp_cmd_send((x), &(a), sizeof(a), sizeof(a), CISP_TIMEOUT))
+ #define CISP_SEND_OUT(x, a)   (cisp_send_read((x), (a), sizeof(*a), sizeof(*a)))
+-#define CISP_POST_IN(x, a)    (cisp_send((x), &(a), sizeof(a), 0, 0))
+-#define CISP_POST_INOUT(x, a)    (cisp_send((x), &(a), sizeof(a), sizeof(a), 0))
++#define CISP_POST_IN(x, a)    (isp_cmd_send((x), &(a), sizeof(a), 0, 0))
++#define CISP_POST_INOUT(x, a)    (isp_cmd_send((x), &(a), sizeof(a), sizeof(a), 0))
+ 
+-static int cisp_send(struct apple_isp *isp, void *args, u32 insize, u32 outsize, int timeout)
++int isp_cmd_send(struct apple_isp *isp, void *args, u32 insize, u32 outsize, int timeout)
+ {
+-	struct isp_channel *chan = isp->chan_io;
+-	struct isp_message *req = &chan->req;
++	struct isp_channel *chan;
++	struct isp_message *req;
+ 	int err;
+ 
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++	KUNIT_STATIC_STUB_REDIRECT(isp_cmd_send, isp, args, insize, outsize, timeout);
++#endif
++	/* Before the command area is overwritten */
++	err = isp_ipc_resync(isp);
++	if (err)
++		return err;
++	chan = isp->chan_io;
++	req = &chan->req;
++
+ 	req->arg0 = isp->cmd_iova;
+ 	req->arg1 = insize;
+ 	req->arg2 = outsize;
+ 
+ 	memcpy(isp->cmd_virt, args, insize);
+ 	err = ipc_chan_send(isp, chan, timeout);
++	/*
++	 * An answered request leaves the ring in step, so a malformed answer
++	 * fails only this command. A timeout is resolved before the next one.
++	 */
++	if (isp_is_p010(isp)) {
++		struct isp_message *rsp = &chan->rsp;
++
++		if (!err && timeout &&
++		    (rsp->arg1 != outsize || rsp->arg2 || rsp->arg3 ||
++		     rsp->arg4 || rsp->arg5 || rsp->arg6 || rsp->arg7 ||
++		     get_unaligned_le64(isp->cmd_virt) != get_unaligned_le64(args)))
++			err = -EIO;
++	}
+ 	if (err) {
+ 		u64 opcode;
+ 		memcpy(&opcode, args, sizeof(opcode));
+@@ -45,7 +73,7 @@ static int cisp_send_read(struct apple_isp *isp, void *args, u32 insize,
+ 			  u32 outsize)
+ {
+ 	/* TODO do I need to lock the iova space? */
+-	int err = cisp_send(isp, args, insize, outsize, CISP_TIMEOUT);
++	int err = isp_cmd_send(isp, args, insize, outsize, CISP_TIMEOUT);
+ 	if (err)
+ 		return err;
+ 
+@@ -151,16 +179,24 @@ int isp_cmd_set_dsid_clr_req_base(struct apple_isp *isp, u64 dsid_clr_base,
+ 	return CISP_SEND_IN(isp, args);
+ }
+ 
+-int isp_cmd_set_dsid_clr_multi_bc(struct apple_isp *isp, u64 dsid_clr_base,
+-				  u32 dsid_clr_range)
++int isp_cmd_set_dsid_clr_multi_bc(struct apple_isp *isp, const u64 *bases,
++				  unsigned int count, u32 dsid_clr_range)
+ {
+ 	struct cmd_set_dsid_clr_multi_bc_reg_base args = {
+ 		.opcode = CISP_OPCODE(CISP_CMD_SET_DSID_CLR_MULTI_BC_REG_BASE),
+-		.count = 1,
++		.count = count,
+ 		.dsid_clr_range = dsid_clr_range,
+-		.dsid_clr_base = dsid_clr_base,
+ 	};
+-	return CISP_SEND_IN(isp, args);
++
++	/* The caller, isp_set_dsid_clr(), bounds count by the array. */
++	if (!count)
++		return -EINVAL;
++	memcpy(args.dsid_clr_base, bases, count * sizeof(*bases));
++
++	return isp_cmd_send(isp, &args,
++			 offsetof(typeof(args), dsid_clr_base) +
++				 count * sizeof(*bases), 0,
++			 CISP_TIMEOUT);
+ }
+ 
+ int isp_cmd_pmp_ctrl_set(struct apple_isp *isp, u64 clock_scratch,
+@@ -224,6 +260,8 @@ int isp_cmd_flicker_sensor_set(struct apple_isp *isp, u32 mode)
+ 		.opcode = CISP_OPCODE(CISP_CMD_FLICKER_SENSOR_SET),
+ 		.mode = mode,
+ 	};
++	if (isp_is_p010(isp))
++		return CISP_SEND_IN(isp, args);
+ 	return CISP_SEND_INOUT(isp, args);
+ }
+ 
+@@ -252,6 +290,16 @@ int isp_cmd_ch_info_get(struct apple_isp *isp, u32 chan,
+ 	return err;
+ }
+ 
++int isp_cmd_ch_camera_config_get(struct apple_isp *isp, u32 chan, u32 index,
++				 struct cmd_ch_camera_config_h17 *args)
++{
++	memset(args, 0, sizeof(*args));
++	args->config.opcode = CISP_OPCODE(CISP_CMD_CH_CAMERA_CONFIG_GET);
++	args->config.chan = chan;
++	args->config.preset = index;
++	return CISP_SEND_OUT(isp, args);
++}
++
+ int isp_cmd_ch_camera_config_current_get(struct apple_isp *isp, u32 chan,
+ 					 struct cmd_ch_camera_config *args)
+ {
+@@ -460,9 +508,9 @@ int isp_cmd_ch_buffer_pool_config_set(struct apple_isp *isp, u32 chan, u16 type)
+ 		.opcode = CISP_OPCODE(CISP_CMD_CH_BUFFER_POOL_CONFIG_SET),
+ 		.chan = chan,
+ 		.type = type,
+-		.count = ISP_MAX_BUFFERS,
+-		.meta_size0 = size,
+-		.meta_size1 = size,
++		.count = isp_num_meta(isp),
++		.meta_size0 = isp_is_p010(isp) ? 0x8000 : size,
++		.meta_size1 = isp_is_p010(isp) ? 0x8000 : size,
+ 		.unk0 = 0,
+ 		.unk1 = 0,
+ 		.unk2 = 0,
+@@ -481,7 +529,8 @@ int isp_cmd_ch_buffer_pool_config_set_rendered(struct apple_isp *isp, u32 chan,
+ 	struct cmd_ch_buffer_pool_config_set_rendered args = {
+ 		.opcode = CISP_OPCODE(CISP_CMD_CH_BUFFER_POOL_CONFIG_SET),
+ 		.chan = chan,
+-		.type = CISP_POOL_TYPE_RENDERED,
++		.type = isp->hw->scl1 ? CISP_POOL_TYPE_RENDERED_SCL1 :
++					CISP_POOL_TYPE_RENDERED,
+ 		.count = count,
+ 		.plane0_size = plane0_size,
+ 		.plane0_stride = plane0_stride,
+@@ -558,6 +607,49 @@ int isp_cmd_apple_ch_temporal_filter_disable(struct apple_isp *isp, u32 chan)
+ 	return CISP_SEND_IN(isp, args);
+ }
+ 
++int isp_cmd_apple_ch_tnr_start_h17(struct apple_isp *isp, u32 chan)
++{
++	struct cmd_apple_ch_temporal_filter_start_h17 args = {
++		.opcode = CISP_OPCODE(CISP_CMD_APPLE_CH_TEMPORAL_FILTER_START),
++		.chan = chan,
++		.unk_c = 1,
++	};
++	return CISP_SEND_IN(isp, args);
++}
++
++int isp_cmd_apple_ch_tnr_high_strength_set(struct apple_isp *isp, u32 chan,
++					   u32 enable)
++{
++	struct cmd_apple_ch_temporal_filter_enable_set args = {
++		.opcode = CISP_OPCODE(CISP_CMD_APPLE_CH_TEMPORAL_FILTER_HIGH_STRENGTH),
++		.chan = chan,
++		.enable = enable,
++	};
++	return CISP_SEND_IN(isp, args);
++}
++
++int isp_cmd_apple_ch_tnr_band0_mod_set(struct apple_isp *isp, u32 chan,
++				       u32 enable)
++{
++	struct cmd_apple_ch_temporal_filter_enable_set args = {
++		.opcode = CISP_OPCODE(CISP_CMD_APPLE_CH_TEMPORAL_FILTER_BAND0_MODULATION),
++		.chan = chan,
++		.enable = enable,
++	};
++	return CISP_SEND_IN(isp, args);
++}
++
++int isp_cmd_apple_ch_tnr_band0_threshold_set(struct apple_isp *isp, u32 chan,
++					     u32 first, u32 second)
++{
++	struct cmd_apple_ch_temporal_filter_band0_threshold args = {
++		.opcode = CISP_OPCODE(CISP_CMD_APPLE_CH_TEMPORAL_FILTER_BAND0_THRESHOLD),
++		.chan = chan,
++		.threshold = { first, second },
++	};
++	return CISP_SEND_IN(isp, args);
++}
++
+ int isp_cmd_ch_ae_stability_set(struct apple_isp *isp, u32 chan, u32 stability)
+ {
+ 	struct cmd_ch_ae_stability_set args = {
+diff --git a/drivers/media/platform/apple/isp/isp-cmd.h b/drivers/media/platform/apple/isp/isp-cmd.h
+index ab0c85023bebf1ca0e07b5cc8bd979d96338841f..9e2678bd1610cd37d6a82df8359bdb84b25b328e 100644
+--- a/drivers/media/platform/apple/isp/isp-cmd.h
++++ b/drivers/media/platform/apple/isp/isp-cmd.h
+@@ -97,6 +97,9 @@
+ #define CISP_CMD_APPLE_CH_MOTION_HISTORY_STOP		     0xc103
+ #define CISP_CMD_APPLE_CH_TEMPORAL_FILTER_ENABLE	     0xc113
+ #define CISP_CMD_APPLE_CH_TEMPORAL_FILTER_DISABLE	     0xc114
++#define CISP_CMD_APPLE_CH_TEMPORAL_FILTER_BAND0_MODULATION   0xc11c
++#define CISP_CMD_APPLE_CH_TEMPORAL_FILTER_BAND0_THRESHOLD    0xc11d
++#define CISP_CMD_APPLE_CH_TEMPORAL_FILTER_HIGH_STRENGTH	     0xc120
+ 
+ #define CISP_POOL_TYPE_META				     0x0
+ #define CISP_POOL_TYPE_RENDERED				     0x1
+@@ -124,6 +127,7 @@
+ #define CISP_COLORSPACE_REC709				     0x1
+ #define CISP_OUTPUT_FORMAT_YUV_2PLANE			     0x0
+ #define CISP_OUTPUT_FORMAT_YUV_1PLANE			     0x1
++#define CISP_OUTPUT_FORMAT_P010				     0x12
+ #define CISP_OUTPUT_FORMAT_RGB				     0x2
+ #define CISP_BUFFER_RECYCLE_MODE_EMPTY_ONLY		     0x1
+ 
+@@ -197,15 +201,20 @@ struct cmd_set_dsid_clr_req_base {
+ } __packed;
+ static_assert(sizeof(struct cmd_set_dsid_clr_req_base) == 0x14);
+ 
+-/* H17: a count of broadcast-clear windows and the first window */
++/*
++ * H17: a count of broadcast-clear windows, their common range and the
++ * windows; the command carries only the @count windows.
++ */
++#define ISP_DSID_MULTI_BC_MAX 8
++
+ struct cmd_set_dsid_clr_multi_bc_reg_base {
+ 	u64 opcode;
+ 	u8 count;
+ 	u8 pad_9[3];
+ 	u32 dsid_clr_range;
+-	u64 dsid_clr_base;
++	u64 dsid_clr_base[ISP_DSID_MULTI_BC_MAX];
+ } __packed;
+-static_assert(sizeof(struct cmd_set_dsid_clr_multi_bc_reg_base) == 0x18);
++static_assert(sizeof(struct cmd_set_dsid_clr_multi_bc_reg_base) == 0x50);
+ 
+ struct cmd_pmp_ctrl_set {
+ 	u64 opcode;
+@@ -250,6 +259,8 @@ struct cmd_flicker_sensor_set {
+ } __packed;
+ static_assert(sizeof(struct cmd_flicker_sensor_set) == 0xc);
+ 
++int isp_cmd_send(struct apple_isp *isp, void *args, u32 insize, u32 outsize,
++		 int timeout);
+ int isp_cmd_start(struct apple_isp *isp, u32 mode);
+ int isp_cmd_stop(struct apple_isp *isp, u32 mode);
+ int isp_cmd_power_down(struct apple_isp *isp);
+@@ -260,8 +271,8 @@ int isp_cmd_config_get(struct apple_isp *isp, struct cmd_config_get *args);
+ int isp_cmd_set_isp_pmu_base(struct apple_isp *isp, u64 pmu_base);
+ int isp_cmd_set_dsid_clr_req_base(struct apple_isp *isp, u64 dsid_clr_base,
+ 				  u32 dsid_clr_range);
+-int isp_cmd_set_dsid_clr_multi_bc(struct apple_isp *isp, u64 dsid_clr_base,
+-				  u32 dsid_clr_range);
++int isp_cmd_set_dsid_clr_multi_bc(struct apple_isp *isp, const u64 *bases,
++				  unsigned int count, u32 dsid_clr_range);
+ int isp_cmd_set_dsid_clr_req_base2(struct apple_isp *isp, u64 dsid_clr_base0,
+ 				   u64 dsid_clr_base1, u64 dsid_clr_base2,
+ 				   u64 dsid_clr_base3, u32 dsid_clr_range0,
+@@ -375,6 +386,15 @@ struct cmd_ch_camera_config {
+ } __packed;
+ static_assert(sizeof(struct cmd_ch_camera_config) == 0xdc);
+ 
++/* H17 appends 0x44 bytes to the common camera configuration record. */
++struct cmd_ch_camera_config_h17 {
++	struct cmd_ch_camera_config config;
++	u8 unknown[0x44];
++} __packed;
++static_assert(sizeof(struct cmd_ch_camera_config_h17) == 0x120);
++static_assert(offsetof(struct cmd_ch_camera_config, in_width) == 0x10);
++static_assert(offsetof(struct cmd_ch_camera_config, out_width2) == 0xd4);
++
+ struct cmd_ch_camera_config_select {
+ 	u64 opcode;
+ 	u32 chan;
+@@ -511,6 +531,8 @@ int isp_cmd_ch_start(struct apple_isp *isp, u32 chan);
+ int isp_cmd_ch_stop(struct apple_isp *isp, u32 chan);
+ int isp_cmd_ch_info_get(struct apple_isp *isp, u32 chan,
+ 			struct cmd_ch_info *args);
++int isp_cmd_ch_camera_config_get(struct apple_isp *isp, u32 chan, u32 index,
++				 struct cmd_ch_camera_config_h17 *args);
+ int isp_cmd_ch_camera_config_current_get(struct apple_isp *isp, u32 chan,
+ 					 struct cmd_ch_camera_config *args);
+ int isp_cmd_ch_camera_config_select(struct apple_isp *isp, u32 chan,
+@@ -624,6 +646,32 @@ struct cmd_apple_ch_temporal_filter_start {
+ } __packed;
+ static_assert(sizeof(struct cmd_apple_ch_temporal_filter_start) == 0x14);
+ 
++/* The H17 firmware's start record carries one more word, sent as zero. */
++struct cmd_apple_ch_temporal_filter_start_h17 {
++	u64 opcode;
++	u32 chan;
++	u32 unk_c;
++	u32 unk_10;
++	u32 unk_14;
++} __packed;
++static_assert(sizeof(struct cmd_apple_ch_temporal_filter_start_h17) == 0x18);
++
++/* High-strength filtering (0xc120) and band 0 modulation (0xc11c) */
++struct cmd_apple_ch_temporal_filter_enable_set {
++	u64 opcode;
++	u32 chan;
++	u32 enable;
++} __packed;
++static_assert(sizeof(struct cmd_apple_ch_temporal_filter_enable_set) == 0x10);
++
++/* Band 0 strength modulation thresholds, in 1/256 steps */
++struct cmd_apple_ch_temporal_filter_band0_threshold {
++	u64 opcode;
++	u32 chan;
++	u32 threshold[2];
++} __packed;
++static_assert(sizeof(struct cmd_apple_ch_temporal_filter_band0_threshold) == 0x14);
++
+ struct cmd_apple_ch_temporal_filter_stop {
+ 	u64 opcode;
+ 	u32 chan;
+@@ -660,6 +708,13 @@ int isp_cmd_apple_ch_motion_history_start(struct apple_isp *isp, u32 chan);
+ int isp_cmd_apple_ch_motion_history_stop(struct apple_isp *isp, u32 chan);
+ int isp_cmd_apple_ch_temporal_filter_enable(struct apple_isp *isp, u32 chan);
+ int isp_cmd_apple_ch_temporal_filter_disable(struct apple_isp *isp, u32 chan);
++int isp_cmd_apple_ch_tnr_start_h17(struct apple_isp *isp, u32 chan);
++int isp_cmd_apple_ch_tnr_high_strength_set(struct apple_isp *isp, u32 chan,
++					   u32 enable);
++int isp_cmd_apple_ch_tnr_band0_mod_set(struct apple_isp *isp, u32 chan,
++				       u32 enable);
++int isp_cmd_apple_ch_tnr_band0_threshold_set(struct apple_isp *isp, u32 chan,
++					     u32 first, u32 second);
+ 
+ struct cmd_ch_ae_stability_set {
+ 	u64 opcode;
+diff --git a/drivers/media/platform/apple/isp/isp-drv-test.c b/drivers/media/platform/apple/isp/isp-drv-test.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..dbddb079a0f572c448778a32dfd360d20842fe0e
+--- /dev/null
++++ b/drivers/media/platform/apple/isp/isp-drv-test.c
+@@ -0,0 +1,135 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * KUnit tests for the per-SoC data of the Apple ISP driver, built into
++ * isp-drv.c: the DART address filter windows and the firmware start. They
++ * need no hardware.
++ */
++
++#include <kunit/device.h>
++#include <kunit/test.h>
++#include <linux/unaligned.h>
++
++/* Every address filter window must lie inside a window the firmware is mapped. */
++static void isp_test_dapf_in_fw_mmio(struct kunit *test)
++{
++	const struct of_device_id *match;
++
++	for (match = apple_isp_of_match; match->compatible[0]; match++) {
++		const struct apple_isp_hw *hw = match->data;
++
++		for (unsigned int i = 0; i < hw->num_dapf; i++) {
++			const struct isp_dapf_window *w = &hw->dapf[i];
++			bool inside = false;
++
++			KUNIT_EXPECT_LE_MSG(test, w->start, w->end, "%s window %u",
++					    match->compatible, i);
++			for (unsigned int j = 0; j < hw->num_fw_mmio; j++) {
++				const struct isp_mmio_window *m = &hw->fw_mmio[j];
++
++				if (w->start >= m->base && w->end < m->base + m->size)
++					inside = true;
++			}
++			KUNIT_EXPECT_TRUE_MSG(test, inside,
++					      "%s window %u 0x%llx-0x%llx is not in fw_mmio",
++					      match->compatible, i, w->start, w->end);
++		}
++	}
++}
++
++#define ISP_TEST_DAPF_FILL	0xa5
++
++/*
++ * Each window fills its own 0x40-byte slot with exactly these words, and
++ * leaves every other byte alone. The bank is plain memory here: the driver
++ * is arm64 only, where the MMIO accessors work on it unchanged.
++ */
++static void isp_test_dapf_program(struct kunit *test)
++{
++	static const struct isp_dapf_window windows[] = {
++		{ 0x380704000, 0x380704063 },
++		{ 0x382824000, 0x382824004 },
++	};
++	static const struct apple_isp_hw hw = {
++		.dapf = windows,
++		.num_dapf = ARRAY_SIZE(windows),
++	};
++	size_t size = (ARRAY_SIZE(windows) + 1) * DAPF_WINDOW_STRIDE;
++	u8 expect[DAPF_WINDOW_STRIDE];
++	struct apple_isp *isp;
++	u8 *bank;
++
++	isp = kunit_kzalloc(test, sizeof(*isp), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, isp);
++	isp->dev = kunit_device_register(test, "apple-isp-dapf-test");
++	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, isp->dev);
++	bank = kunit_kmalloc(test, size, GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, bank);
++	memset(bank, ISP_TEST_DAPF_FILL, size);
++	isp->hw = &hw;
++	isp->dapf = (__force void __iomem *)bank;
++
++	KUNIT_ASSERT_EQ(test, apple_isp_program_dapf(isp), 0);
++
++	for (unsigned int i = 0; i < ARRAY_SIZE(windows); i++) {
++		memset(expect, ISP_TEST_DAPF_FILL, sizeof(expect));
++		put_unaligned_le32(0x31, &expect[0x00]);
++		put_unaligned_le32(0, &expect[0x04]);
++		put_unaligned_le64(windows[i].start, &expect[0x08]);
++		put_unaligned_le64(windows[i].end, &expect[0x10]);
++		put_unaligned_le32(1, &expect[0x20]);
++		KUNIT_EXPECT_MEMEQ_MSG(test, bank + i * DAPF_WINDOW_STRIDE, expect,
++				       sizeof(expect), "window %u", i);
++	}
++
++	/* The slot after the last window is untouched. */
++	KUNIT_EXPECT_NULL(test, memchr_inv(bank + ARRAY_SIZE(windows) * DAPF_WINDOW_STRIDE,
++					   ISP_TEST_DAPF_FILL, DAPF_WINDOW_STRIDE));
++}
++
++static struct kunit_case isp_dapf_test_cases[] = {
++	KUNIT_CASE(isp_test_dapf_in_fw_mmio),
++	KUNIT_CASE(isp_test_dapf_program),
++	{}
++};
++
++static struct kunit_suite isp_dapf_test_suite = {
++	.name = "apple-isp-dapf",
++	.test_cases = isp_dapf_test_cases,
++};
++
++kunit_test_suite(isp_dapf_test_suite);
++
++/*
++ * A deferred start detects the camera once: its firmware must keep running
++ * or start again. Firmware that starts again is not resident, and only it
++ * is quiesced before the power-down.
++ */
++static void isp_test_firmware_lifetime(struct kunit *test)
++{
++	const struct of_device_id *match;
++
++	for (match = apple_isp_of_match; match->compatible[0]; match++) {
++		const struct apple_isp_hw *hw = match->data;
++
++		if (hw->deferred_start)
++			KUNIT_EXPECT_TRUE_MSG(test, hw->resident_fw || hw->fw_restore,
++					      "%s", match->compatible);
++		KUNIT_EXPECT_FALSE_MSG(test, hw->resident_fw && hw->fw_restore, "%s",
++				       match->compatible);
++		if (hw->coproc_quiesce)
++			KUNIT_EXPECT_TRUE_MSG(test, hw->fw_restore, "%s",
++					      match->compatible);
++	}
++}
++
++static struct kunit_case isp_hw_test_cases[] = {
++	KUNIT_CASE(isp_test_firmware_lifetime),
++	{}
++};
++
++static struct kunit_suite isp_hw_test_suite = {
++	.name = "apple-isp-hw",
++	.test_cases = isp_hw_test_cases,
++};
++
++kunit_test_suite(isp_hw_test_suite);
+diff --git a/drivers/media/platform/apple/isp/isp-drv.c b/drivers/media/platform/apple/isp/isp-drv.c
+index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece9014e78740b 100644
+--- a/drivers/media/platform/apple/isp/isp-drv.c
++++ b/drivers/media/platform/apple/isp/isp-drv.c
+@@ -5,10 +5,12 @@
+  * Copyright (C) 2023 The Asahi Linux Contributors
+  */
+ 
++#include <linux/io.h>
+ #include <linux/iommu.h>
+ #include <linux/module.h>
+ #include <linux/of_address.h>
+ #include <linux/of_device.h>
++#include <linux/of_reserved_mem.h>
+ #include <linux/platform_device.h>
+ #include <linux/pm_domain.h>
+ #include <linux/pm_runtime.h>
+@@ -20,6 +22,41 @@
+ #include "isp-regs.h"
+ #include "isp-v4l2.h"
+ 
++static void apple_isp_kvfree(void *data)
++{
++	kvfree(data);
++}
++
++/*
++ * Keep a copy of the firmware data segment as the boot loader loaded it
++ * (hw->fw_restore). This must run before the firmware first starts.
++ */
++static int apple_isp_copy_fw_data(struct apple_isp *isp)
++{
++	struct device *dev = isp->dev;
++	struct resource res;
++	int err;
++
++	err = of_reserved_mem_region_to_resource_byname(dev->of_node, "data", &res);
++	if (err)
++		return err;
++
++	isp->fw_data_size = resource_size(&res);
++	isp->fw_data = devm_memremap(dev, res.start, isp->fw_data_size, MEMREMAP_WB);
++	if (IS_ERR(isp->fw_data))
++		return PTR_ERR(isp->fw_data);
++
++	isp->fw_data_copy = kvmalloc(isp->fw_data_size, GFP_KERNEL);
++	if (!isp->fw_data_copy)
++		return -ENOMEM;
++	err = devm_add_action_or_reset(dev, apple_isp_kvfree, isp->fw_data_copy);
++	if (err)
++		return err;
++
++	memcpy(isp->fw_data_copy, isp->fw_data, isp->fw_data_size);
++	return 0;
++}
++
+ static void apple_isp_detach_genpd(struct apple_isp *isp)
+ {
+ 	if (isp->pd_count <= 1)
+@@ -144,17 +181,116 @@ static int apple_isp_map_fw_mmio(struct apple_isp *isp)
+ 	return 0;
+ }
+ 
++/* The IOVA range of a memory-region, from its last iommu-addresses entry. */
++static int isp_of_region_iova(struct device *dev, const char *name,
++			      phys_addr_t *base, size_t *size)
++{
++	const __be32 *maps, *end;
++	int idx, len;
++
++	idx = of_property_match_string(dev->of_node, "memory-region-names",
++				       name);
++	if (idx < 0)
++		return -ENOENT;
++
++	struct device_node *np __free(device_node) =
++		of_parse_phandle(dev->of_node, "memory-region", idx);
++	if (!np)
++		return -ENODEV;
++
++	maps = of_get_property(np, "iommu-addresses", &len);
++	if (!maps || !len)
++		return -ENODEV;
++
++	end = maps + len / sizeof(__be32);
++
++	while (maps < end) {
++		maps++;
++		maps = of_translate_dma_region(dev->of_node, maps, base, size);
++	}
++
++	return 0;
++}
++
++/*
++ * The firmware reaches its fixed MMIO windows through the first DART, whose
++ * address filter the ADT describes for them. Its registers are on that DART.
++ */
++static int apple_isp_map_dapf(struct apple_isp *isp)
++{
++	struct device *dev = isp->dev;
++	/* The first iommus entry, whatever its #iommu-cells */
++	struct device_node *dart __free(device_node) =
++		of_parse_phandle(dev->of_node, "iommus", 0);
++	struct resource res;
++	int idx, err;
++
++	if (!dart)
++		return dev_err_probe(dev, -ENODEV, "no ISP DART\n");
++
++	/* DAPF_* describe the T8110 DART's address filter */
++	if (!of_device_is_compatible(dart, "apple,t8110-dart"))
++		return dev_err_probe(dev, -ENODEV,
++				     "%pOF has no known address filter\n", dart);
++
++	idx = of_property_match_string(dart, "reg-names", "dapf");
++	if (idx < 0)
++		return dev_err_probe(dev, idx,
++				     "%pOF has no address filter registers\n", dart);
++
++	err = of_address_to_resource(dart, idx, &res);
++	if (err)
++		return dev_err_probe(dev, err, "%pOF: bad address filter registers\n",
++				     dart);
++
++	if (resource_size(&res) < isp->hw->num_dapf * DAPF_WINDOW_STRIDE)
++		return dev_err_probe(dev, -EINVAL, "%pOF: address filter too small\n",
++				     dart);
++
++	isp->dapf = devm_ioremap_resource(dev, &res);
++	return PTR_ERR_OR_ZERO(isp->dapf);
++}
++
++/* Program the address filter windows, then check that they took. */
++int apple_isp_program_dapf(struct apple_isp *isp)
++{
++	const struct apple_isp_hw *hw = isp->hw;
++	void __iomem *w;
++	unsigned int i;
++
++	for (i = 0; i < hw->num_dapf; i++) {
++		w = isp->dapf + i * DAPF_WINDOW_STRIDE;
++		writel(0, w + DAPF_CTRL1);
++		writeq(hw->dapf[i].start, w + DAPF_START);
++		writeq(hw->dapf[i].end, w + DAPF_END);
++		writel(DAPF_CTRL0_ISP, w + DAPF_CTRL0);
++		writel(DAPF_CTRL2_ISP, w + DAPF_CTRL2);
++	}
++
++	/* Only bits 7:0 of CTRL0 and bits 63:2 of END read back. */
++	for (i = 0; i < hw->num_dapf; i++) {
++		w = isp->dapf + i * DAPF_WINDOW_STRIDE;
++		if (readl(w + DAPF_CTRL1) ||
++		    readq(w + DAPF_START) != hw->dapf[i].start ||
++		    (readq(w + DAPF_END) | 3) != (hw->dapf[i].end | 3) ||
++		    (readl(w + DAPF_CTRL0) & 0xff) != DAPF_CTRL0_ISP ||
++		    readl(w + DAPF_CTRL2) != DAPF_CTRL2_ISP) {
++			dev_err(isp->dev, "DAPF window %u (0x%llx-0x%llx) failed readback\n",
++				i, hw->dapf[i].start, hw->dapf[i].end);
++			return -EIO;
++		}
++	}
++
++	return 0;
++}
++
+ static int apple_isp_init_iommu(struct apple_isp *isp)
+ {
+ 	struct device *dev = isp->dev;
+-	phys_addr_t heap_base;
+-	size_t heap_size;
++	phys_addr_t heap_base, data_base;
++	size_t heap_size, data_size;
+ 	u64 vm_size;
+ 	int err;
+-	int idx;
+-	int size;
+-	struct device_node *mem_node;
+-	const __be32 *maps, *end;
+ 
+ 	isp->domain = iommu_get_domain_for_dev(isp->dev);
+ 	if (!isp->domain)
+@@ -162,30 +298,38 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+ 	isp->shift = __ffs(isp->domain->pgsize_bitmap);
+ 	isp->fw_iova_mask = isp->hw->fw_iova_mask ?: U64_MAX;
+ 
+-	idx = of_property_match_string(dev->of_node, "memory-region-names",
+-				       "heap");
+-	mem_node = of_parse_phandle(dev->of_node, "memory-region", idx);
+-	if (!mem_node) {
+-		dev_err(dev, "No memory-region found for heap\n");
+-		return -ENODEV;
+-	}
+-
+-	maps = of_get_property(mem_node, "iommu-addresses", &size);
+-	if (!maps || !size) {
++	err = isp_of_region_iova(dev, "heap", &heap_base, &heap_size);
++	if (err) {
+ 		dev_err(dev, "No valid iommu-addresses found for heap\n");
+ 		return -ENODEV;
+ 	}
+ 
+-	end = maps + size / sizeof(__be32);
+-
+-	while (maps < end) {
+-		maps++;
+-		maps = of_translate_dma_region(dev->of_node, maps, &heap_base,
+-					       &heap_size);
+-	}
+-
++	isp->fw.heap_base = heap_base;
+ 	isp->fw.heap_top = heap_base + heap_size;
+ 
++	/*
++	 * Where the bootloader loads the firmware's data, it backs the
++	 * firmware's main memory only up to the end of it. The rest, up to
++	 * the heap top, is the host's to back.
++	 */
++	err = -ENOENT;
++	if (isp->hw->gen == ISP_GEN_T6040)
++		err = isp_of_region_iova(dev, "data", &data_base, &data_size);
++	if (!err) {
++		isp->fw.data_top = data_base + data_size;
++		if (isp->fw.data_top <= isp->fw.heap_base ||
++		    isp->fw.data_top > isp->fw.heap_top ||
++		    !IS_ALIGNED(isp->fw.data_top, 1UL << isp->shift)) {
++			dev_err(dev, "data 0x%llx outside the heap 0x%llx-0x%llx\n",
++				isp->fw.data_top, isp->fw.heap_base,
++				isp->fw.heap_top);
++			return -EINVAL;
++		}
++	} else if (err != -ENOENT) {
++		dev_err(dev, "No valid iommu-addresses found for data\n");
++		return -ENODEV;
++	}
++
+ 	err = of_property_read_u64(dev->of_node, "apple,dart-vm-size",
+ 				   &vm_size);
+ 	if (err) {
+@@ -195,11 +339,11 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+ 
+ 	// FIXME: refactor this, maybe use regular iova stuff?
+ 	isp->iova_size = vm_size - (heap_base & 0xffffffff);
+-	drm_mm_init(&isp->iovad, isp->fw.heap_top, isp->iova_size);
++	mt_init_flags(&isp->iovas, MT_FLAGS_ALLOC_RANGE);
+ 
+ 	err = apple_isp_map_fw_mmio(isp);
+ 	if (err) {
+-		drm_mm_takedown(&isp->iovad);
++		mtree_destroy(&isp->iovas);
+ 		return err;
+ 	}
+ 
+@@ -209,7 +353,8 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+ static void apple_isp_free_iommu(struct apple_isp *isp)
+ {
+ 	apple_isp_unmap_fw_mmio(isp, isp->hw->num_fw_mmio);
+-	drm_mm_takedown(&isp->iovad);
++	WARN_ON(!mtree_empty(&isp->iovas));
++	mtree_destroy(&isp->iovas);
+ }
+ 
+ static int isp_of_read_coord(struct device *dev, struct device_node *np,
+@@ -434,6 +579,10 @@ static int apple_isp_probe(struct platform_device *pdev)
+ 		isp->temporal_filter = 0;
+ 	}
+ 
++	/* the sensor connection layout, for firmware that takes it at boot */
++	of_property_read_u32(dev->of_node, "apple,cam-connections-scheme",
++			     &isp->cam_connections_scheme);
++
+ 	err = apple_isp_init_presets(isp);
+ 	if (err) {
+ 		dev_err(dev, "failed to initialize presets\n");
+@@ -482,6 +631,12 @@ static int apple_isp_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	if (isp->hw->num_dapf) {
++		err = apple_isp_map_dapf(isp);
++		if (err)
++			goto detach_genpd;
++	}
++
+ 	/* Capture watchdog, where the ISP gates its frames on one */
+ 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "wdt");
+ 	if (res) {
+@@ -503,7 +658,6 @@ static int apple_isp_probe(struct platform_device *pdev)
+ 		goto detach_genpd;
+ 	}
+ 
+-	mutex_init(&isp->iovad_lock);
+ 	mutex_init(&isp->video_lock);
+ 	spin_lock_init(&isp->buf_lock);
+ 	init_waitqueue_head(&isp->wait);
+@@ -512,6 +666,7 @@ static int apple_isp_probe(struct platform_device *pdev)
+ 	mutex_init(&isp->gc_lock);
+ 	INIT_LIST_HEAD(&isp->bufs_pending);
+ 	INIT_LIST_HEAD(&isp->bufs_submitted);
++	INIT_LIST_HEAD(&isp->bufs_returned);
+ 	isp->wq = alloc_workqueue("apple-isp-wq", WQ_UNBOUND, 0);
+ 	if (!isp->wq) {
+ 		dev_err(dev, "failed to create workqueue\n");
+@@ -531,12 +686,23 @@ static int apple_isp_probe(struct platform_device *pdev)
+ 		goto free_iommu;
+ 	}
+ 
++	if (isp->hw->fw_restore) {
++		err = apple_isp_copy_fw_data(isp);
++		if (err) {
++			dev_err(dev, "failed to copy the firmware data: %d\n", err);
++			apple_isp_free_firmware_surface(isp);
++			goto free_iommu;
++		}
++	}
++
+ 	pm_runtime_enable(dev);
+ 
+-	err = apple_isp_detect_camera(isp);
+-	if (err) {
+-		dev_err(dev, "failed to detect camera: %d\n", err);
+-		goto free_surface;
++	if (!isp->hw->deferred_start) {
++		err = apple_isp_detect_camera(isp);
++		if (err) {
++			dev_err(dev, "failed to detect camera: %d\n", err);
++			goto free_surface;
++		}
+ 	}
+ 
+ 	err = apple_isp_setup_video(isp);
+@@ -559,6 +725,7 @@ static int apple_isp_probe(struct platform_device *pdev)
+ detach_genpd:
+ 	apple_isp_detach_genpd(isp);
+ free_isp:
++	kfree(isp->sensor_configs);
+ 	/* Nothing else can reach it before the video device is registered. */
+ 	kfree(isp);
+ 	return err;
+@@ -799,6 +966,192 @@ static const struct apple_isp_hw apple_isp_hw_t8140 = {
+ 	.boot_mode = 1,
+ 	.capture_meta_size = ISP_CAPTURE_META_SIZE_T8140,
+ 	.resident_fw = true,
++	.meta_exposure = true,
++};
++
++/* The same for T6040, from the J616s ADT's DART address filter. */
++static const struct isp_mmio_window apple_isp_fw_mmio_t6040[] = {
++	{ 0x220004000, 0x1d4000 },	/* DSID broadcast-clear windows */
++	{ 0x222004000, 0x1d4000 },
++	{ 0x224004000, 0x1d4000 },
++	{ 0x226004000, 0x1d4000 },
++	{ 0x485660000, 0x4000 },
++	{ 0x5003c0000, 0x28000 },	/* PMGR, with the PMP clock scratch */
++	{ 0x500e3c000, 0x4000 },
++	{ 0x502284000, 0x4000 },	/* PMGR, ISP power states */
++	{ 0x502880000, 0x8000 },
++	{ 0x504824000, 0x4000 },	/* PMP bandwidth scratch */
++	{ 0x51062c000, 0x20000 },
++};
++
++/*
++ * T6040 runs the same coprocessor and firmware interface as T8140, booted
++ * as macOS boots it on the J616s (macOS 26.6.2 camera log, kext register
++ * map) and as aurora's m1n1 proxy captures with it: no coprocessor reset,
++ * four broadcast-clear windows in eight slots, the scaler 1 output path and
++ * no capture metadata pool or watchdog.
++ */
++static const struct apple_isp_hw apple_isp_hw_t6040 = {
++	.gen = ISP_GEN_T6040,
++	.fw_abi = ISP_FW_ABI_H17,
++	.pmu_base = 0x0,
++
++	.dsid_count = 4,
++	.dsid_slots = 8,
++	.dsid_clr_base0 = 0x2201d4000,
++	.dsid_clr_base1 = 0x2221d4000,
++	.dsid_clr_base2 = 0x2241d4000,
++	.dsid_clr_base3 = 0x2261d4000,
++	.dsid_clr_range0 = 0x2fc,
++
++	/* the PMGR and PMP scratch words of the ISP's DAPF windows */
++	.clock_scratch = 0x5003d0fa8,
++	.clock_base = 0x0,
++	.clock_bit = 0x0,
++	.clock_size = 0x8,
++	.bandwidth_scratch = 0x504824000,
++	.bandwidth_base = 0x0,
++	.bandwidth_bit = 0x0,
++	.bandwidth_size = 0x8,
++	.mbox_irq_enable = ISP_MBOX_IRQ_ENABLE_T6031,
++
++	.scl1 = true,
++	.lpdp = false,
++	.meta_size = ISP_META_SIZE_T8140,
++	.fw_mmio = apple_isp_fw_mmio_t6040,
++	.num_fw_mmio = ARRAY_SIZE(apple_isp_fw_mmio_t6040),
++
++	.coproc_control = ISP_COPROC_CONTROL_T8140,
++	.boot_mode = 1,
++	.shared_size = 0xde600000,
++	.resident_fw = true,
++	.meta_exposure = true,
++};
++
++/* T8132: the firmware's MMIO windows, from the J713 ADT's DART address filter */
++static const struct isp_mmio_window apple_isp_fw_mmio_t8132[] = {
++	{ 0x220004000, 0x1d4000 },	/* DSID broadcast-clear windows */
++	{ 0x222004000, 0x1d4000 },
++	{ 0x3803c0000, 0x28000 },	/* PMGR, with the PMP clock scratch */
++	{ 0x380704000, 0x4000 },	/* PMGR, ISP power states */
++	{ 0x380730000, 0x4000 },
++	{ 0x380e3c000, 0x4000 },
++	{ 0x382824000, 0x4000 },	/* PMP bandwidth scratch */
++	{ 0x39062c000, 0x20000 },
++	{ 0x501660000, 0x4000 },
++};
++
++/* The ADT's DART address filter windows, in its order and with its ends */
++static const struct isp_dapf_window apple_isp_dapf_t8132[] = {
++	{ 0x380704000, 0x380704063 },	/* PMGR, ISP power states */
++	{ 0x380730000, 0x380733fff },
++	{ 0x380e3c000, 0x380e3c003 },
++	{ 0x39062c000, 0x390648003 },
++	{ 0x501660000, 0x501660003 },
++	{ 0x220004000, 0x2200162fc },	/* DSID broadcast-clear windows */
++	{ 0x220044000, 0x2200562fc },
++	{ 0x2201c4000, 0x2201d62fc },
++	{ 0x222004000, 0x2220162fc },
++	{ 0x222044000, 0x2220562fc },
++	{ 0x2221c4000, 0x2221d62fc },
++	{ 0x3803c0000, 0x3803e4000 },	/* PMGR, with the PMP clock scratch */
++	{ 0x382824000, 0x382824004 },	/* PMP bandwidth scratch */
++};
++
++/*
++ * T8132 runs T6040's coprocessor and firmware interface, booted the same
++ * way. Its two AMCCs (ADT mcc amcc_aperture_count) give two broadcast-clear
++ * windows, passed one per AMCC without padding slots. No PMP_CTRL_SET is
++ * sent: T8132's PMP scratch offsets are not established. Its firmware
++ * starts again from its data segment as loaded once the coprocessor was
++ * quiesced before the power-down, so the ISP is powered only while the
++ * camera is in use.
++ */
++static const struct apple_isp_hw apple_isp_hw_t8132 = {
++	.gen = ISP_GEN_T6040,
++	.fw_abi = ISP_FW_ABI_H17,
++	.pmu_base = 0x0,
++
++	.dsid_count = 2,
++	.dsid_clr_base0 = 0x2201d4000,
++	.dsid_clr_base1 = 0x2221d4000,
++	.dsid_clr_range0 = 0x2fc,
++
++	.mbox_irq_enable = ISP_MBOX_IRQ_ENABLE_T6031,
++
++	.scl1 = true,
++	.lpdp = false,
++	.meta_size = ISP_META_SIZE_T8140,
++	.fw_mmio = apple_isp_fw_mmio_t8132,
++	.num_fw_mmio = ARRAY_SIZE(apple_isp_fw_mmio_t8132),
++	.dapf = apple_isp_dapf_t8132,
++	.num_dapf = ARRAY_SIZE(apple_isp_dapf_t8132),
++
++	.coproc_control = ISP_COPROC_CONTROL_T8140,
++	.coproc_status = ISP_COPROC_STATUS_T8140,
++	.coproc_quiesce = ISP_COPROC_QUIESCE_T8140,
++	.boot_mode = 1,
++	.shared_size = 0xdec00000,
++	.fw_restore = true,
++	.deferred_start = true,
++};
++
++/*
++ * T8142 (M5, J813): the Neo's ISP17a. The J813 ADT's dart-isp
++ * dapf-instance-0 ranges, rounded out to 16 KiB pages; mostly the T8140
++ * windows at +0x80000000, with one DSID window and two new ranges.
++ */
++static const struct isp_mmio_window apple_isp_fw_mmio_t8142[] = {
++	{ 0x220104000, 0x14000 },	/* DSID broadcast-clear window */
++	{ 0x3803c0000, 0x28000 },	/* PMGR, with the PMP clock scratch */
++	{ 0x380704000, 0x4000 },	/* PMGR, ISP power states */
++	{ 0x380730000, 0x4000 },
++	{ 0x380e3c000, 0x4000 },
++	{ 0x382724000, 0x4000 },	/* PMP bandwidth scratch */
++	{ 0x39062c000, 0x30000 },
++	{ 0x3a1340000, 0x4000 },
++	{ 0x3a1358000, 0xc000 },
++	{ 0x421660000, 0x4000 },
++};
++
++static const struct apple_isp_hw apple_isp_hw_t8142 = {
++	.gen = ISP_GEN_T8140,
++	.fw_abi = ISP_FW_ABI_H17,
++	.pmu_base = 0x0,
++
++	.dsid_count = 1,
++	.dsid_clr_base0 = 0x220116000,
++	.dsid_clr_range0 = 0x2fc,
++
++	.clock_scratch = 0x3803d0ca0,
++	.clock_base = 0x0,
++	.clock_bit = 0x0,
++	.clock_size = 0x8,
++	.bandwidth_scratch = 0x382724000,
++	.bandwidth_base = 0x0,
++	.bandwidth_bit = 0x0,
++	.bandwidth_size = 0x8,
++	.mbox_irq_enable = ISP_MBOX_IRQ_ENABLE_T6031,
++
++	/*
++	 * No BES scaler: the firmware asserts on CH_CROP_SET ("BesProc is
++	 * removed/not present. Must config AuxSclPr") and takes the SCL1 set.
++	 */
++	.scl1 = true,
++	.lpdp = true,
++	.meta_size = ISP_META_SIZE_T8140,
++
++	.fw_iova_mask = GENMASK_ULL(35, 0),
++	.mbox2_offset = 0x410,
++	.mbox_irq_route = true,
++	.coproc_control = ISP_COPROC_CONTROL_T8140,
++	.fw_mmio = apple_isp_fw_mmio_t8142,
++	.num_fw_mmio = ARRAY_SIZE(apple_isp_fw_mmio_t8142),
++	.boot_mode = 1,
++	.capture_meta_size = ISP_CAPTURE_META_SIZE_T8140,
++	.resident_fw = true,
++	/* The J813 IMX958 runs the xx24 setfile 2224_01, as T6040 does. */
++	.setfile_stride_fixup = true,
+ };
+ 
+ static const struct of_device_id apple_isp_of_match[] = {
+@@ -810,6 +1163,9 @@ static const struct of_device_id apple_isp_of_match[] = {
+ 	{ .compatible = "apple,t6030-isp", .data = &apple_isp_hw_t6030 },
+ 	{ .compatible = "apple,t6031-isp", .data = &apple_isp_hw_t6031 },
+ 	{ .compatible = "apple,t8140-isp", .data = &apple_isp_hw_t8140 },
++	{ .compatible = "apple,t8142-isp", .data = &apple_isp_hw_t8142 },
++	{ .compatible = "apple,t6041-isp", .data = &apple_isp_hw_t6040 },
++	{ .compatible = "apple,t8132-isp", .data = &apple_isp_hw_t8132 },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(of, apple_isp_of_match);
+@@ -850,8 +1206,8 @@ static __maybe_unused int apple_isp_freeze(struct device *dev)
+ 	/*
+ 	 * Hibernation hands the system from one kernel to another, and
+ 	 * firmware left running would go on using the memory of the kernel
+-	 * that started it. Stop it cleanly instead; the camera is then
+-	 * unavailable until the next system boot.
++	 * that started it. Stop it cleanly instead; if it ran, the camera is
++	 * then unavailable until the next system boot.
+ 	 */
+ 	if (isp->hw->resident_fw) {
+ 		mutex_lock(&isp->video_lock);
+@@ -883,6 +1239,23 @@ static const struct dev_pm_ops apple_isp_pm_ops = {
+ 	RUNTIME_PM_OPS(apple_isp_runtime_suspend, apple_isp_runtime_resume, NULL)
+ };
+ 
++/*
++ * Stop firmware that starts again (hw->fw_restore) before a reboot or a
++ * kexec, so that the next kernel finds its data segment as loaded.
++ */
++static void apple_isp_shutdown(struct platform_device *pdev)
++{
++	struct apple_isp *isp = platform_get_drvdata(pdev);
++
++	if (!isp || !isp->hw->fw_restore)
++		return;
++	/* A stream that still runs is stopped cleanly first, as for hibernation */
++	apple_isp_video_suspend(isp);
++	mutex_lock(&isp->video_lock);
++	apple_isp_firmware_halt(isp);
++	mutex_unlock(&isp->video_lock);
++}
++
+ static struct platform_driver apple_isp_driver = {
+ 	.driver	= {
+ 		.name		= "apple-isp",
+@@ -891,9 +1264,14 @@ static struct platform_driver apple_isp_driver = {
+ 	},
+ 	.probe	= apple_isp_probe,
+ 	.remove	= apple_isp_remove,
++	.shutdown = apple_isp_shutdown,
+ };
+ module_platform_driver(apple_isp_driver);
+ 
+ MODULE_AUTHOR("Eileen Yoon <eyn@gmx.com>");
+ MODULE_DESCRIPTION("Apple ISP driver");
+ MODULE_LICENSE("GPL v2");
++
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++#include "isp-drv-test.c"
++#endif
+diff --git a/drivers/media/platform/apple/isp/isp-drv.h b/drivers/media/platform/apple/isp/isp-drv.h
+index 8f945c26f00e6d10246f70ac4e97342b4ef68f22..9056c3d7af143cc5ea8044f40f19fbf91ef46617 100644
+--- a/drivers/media/platform/apple/isp/isp-drv.h
++++ b/drivers/media/platform/apple/isp/isp-drv.h
+@@ -6,11 +6,11 @@
+ 
+ #include <linux/hrtimer.h>
+ #include <linux/list.h>
++#include <linux/maple_tree.h>
+ #include <linux/mutex.h>
+ #include <linux/types.h>
+ #include <linux/spinlock.h>
+ 
+-#include <drm/drm_mm.h>
+ #include <media/v4l2-ctrls.h>
+ #include <media/v4l2-device.h>
+ #include <media/videobuf2-core.h>
+@@ -30,6 +30,8 @@
+ 
+ /* used to limit the user space buffers to the buffer_pool_config */
+ #define ISP_MAX_BUFFERS 16
++#define ISP_MAX_SENSOR_CONFIGS 64
++#define ISP_SENSOR_CONFIG_SIZE 0x120
+ 
+ /* capture metadata buffers, for firmware that has that pool */
+ #define ISP_CAPMETA_BUFFERS 8
+@@ -51,6 +53,7 @@ enum isp_generation {
+ 	ISP_GEN_T8112,
+ 	ISP_GEN_T6031,
+ 	ISP_GEN_T8140,
++	ISP_GEN_T6040,
+ };
+ 
+ /*
+@@ -79,7 +82,6 @@ enum isp_firmware_version {
+ };
+ 
+ struct isp_surf {
+-	struct drm_mm_node *mm;
+ 	struct list_head head;
+ 	u64 size;
+ 	u64 type;
+@@ -91,6 +93,7 @@ struct isp_surf {
+ 	refcount_t refcount;
+ 	bool gc;
+ 	bool submitted;
++	bool iova_reserved; /* @iova comes from &apple_isp.iovas */
+ };
+ 
+ struct isp_message {
+@@ -115,6 +118,8 @@ struct isp_channel {
+ 	void *virt;
+ 	u32 doorbell;
+ 	u32 cursor;
++	unsigned long deadline;
++	bool deadline_active;
+ 	struct mutex lock;
+ 	struct isp_message req;
+ 	struct isp_message rsp;
+@@ -132,12 +137,23 @@ struct isp_mmio_window {
+ 	u64 size;
+ };
+ 
++/*
++ * A DART address filter window. Both bounds are inclusive and word
++ * granular, as the hardware takes them.
++ */
++struct isp_dapf_window {
++	u64 start;
++	u64 end;
++};
++
+ struct isp_preset {
+ 	u32 index;
+ 	struct coord input_dim;
+ 	struct coord output_dim;
+ 	struct coord crop_offset;
+ 	struct coord crop_size;
++	/* Processed P010 geometry established by preview or a config reply. */
++	bool p010;
+ };
+ 
+ struct apple_isp_hw {
+@@ -146,6 +162,8 @@ struct apple_isp_hw {
+ 	u64 pmu_base;
+ 
+ 	int dsid_count;
++	/* windows of the H17 multi broadcast-clear command, the unused all ones */
++	u8 dsid_slots;
+ 	u64 dsid_clr_base0;
+ 	u64 dsid_clr_base1;
+ 	u64 dsid_clr_base2;
+@@ -178,22 +196,64 @@ struct apple_isp_hw {
+ 	bool mbox_irq_route;
+ 	/* coprocessor control register, 0 for ISP_COPROC_CONTROL */
+ 	u32 coproc_control;
++	/* coprocessor status register, 0 for ISP_COPROC_STATUS */
++	u32 coproc_status;
++	/*
++	 * coprocessor quiesce register, 0 for none. The CPU core domains of
++	 * a coprocessor that stopped only power down cleanly once it has
++	 * quiesced; otherwise they stay busy and never run again.
++	 */
++	u32 coproc_quiesce;
+ 
+ 	/* windows mapped 1:1 for the firmware */
+ 	const struct isp_mmio_window *fw_mmio;
+ 	unsigned int num_fw_mmio;
+ 
++	/*
++	 * The windows the ADT gives the first DART's address filter, inside
++	 * the fw_mmio windows. The filter loses them with ISP_SYS, so they
++	 * are programmed after every power-up.
++	 */
++	const struct isp_dapf_window *dapf;
++	unsigned int num_dapf;
++
+ 	/* ISP_GPIO_6 boot mode */
+ 	u32 boot_mode;
+ 
++	/* shared memory size in the H16 boot descriptor, 0 for the T8140 one */
++	u64 shared_size;
++
+ 	/* size of a capture metadata buffer, 0 for no such pool */
+ 	u32 capture_meta_size;
+ 
++	/* metadata buffers carry the frame's exposure report (H17 firmware) */
++	bool meta_exposure;
++
+ 	/*
+-	 * The firmware can be started only once per system boot, so it is
+-	 * started at probe and kept running while the driver is bound.
++	 * The firmware leaves its data segment changed when it stops, and
++	 * does not start from it again. Keep a copy of the segment as the
++	 * boot loader loaded it, taken at probe before the firmware first
++	 * runs, and put it back whenever the firmware has stopped.
++	 */
++	bool fw_restore;
++
++	/*
++	 * The firmware can be started only once per system boot, so once
++	 * started it is kept running while the driver is bound. It starts at
++	 * probe, or at the first stream with deferred_start.
+ 	 */
+ 	bool resident_fw;
++
++	/*
++	 * Start the firmware, and detect the camera, at the first stream
++	 * instead of at probe, so the ISP stays off until then. The firmware
++	 * must be resident or start again (fw_restore): the camera is
++	 * detected only once.
++	 */
++	bool deferred_start;
++
++	/* The xx24 setfiles' lens shading strides need zeroing (T8142). */
++	bool setfile_stride_fixup;
+ };
+ 
+ enum isp_sensor_id {
+@@ -244,13 +304,23 @@ enum isp_sensor_id {
+ 	ISP_IMX814_2123_01,
+ 	ISP_IMX853_7622_01,
+ 	ISP_IMX913_7523_01,
++	ISP_IMX958_2224_01,
+ 	ISP_VD56G0_6221_01,
+ 	ISP_VD56G0_6222_01,
+ };
+ 
++struct isp_sensor_config {
++	struct coord input_dim;
++	struct coord output_dim;
++	u32 sensor_clk;
++	bool usable;
++	u8 reply[ISP_SENSOR_CONFIG_SIZE];
++};
++
+ struct isp_format {
+ 	enum isp_sensor_id id;
+ 	u32 version;
++	u32 pixelformat;
+ 	struct isp_preset *preset;
+ 	unsigned int num_planes;
+ 	u32 strides[VB2_MAX_PLANES];
+@@ -264,8 +334,12 @@ struct apple_isp {
+ 	enum isp_firmware_version fw_compat;
+ 	u32 platform_id;
+ 	u32 temporal_filter;
++	u32 cam_connections_scheme;
+ 	struct isp_preset *presets;
+ 	int num_presets;
++	/* Read-only sensor configuration replies, cached before video registration. */
++	unsigned int num_sensor_configs;
++	struct isp_sensor_config *sensor_configs;
+ 
+ 	int num_channels;
+ 	struct isp_format fmts[ISP_MAX_CHANNELS];
+@@ -276,10 +350,16 @@ struct apple_isp {
+ 	struct v4l2_device v4l2_dev;
+ 	struct v4l2_ctrl_handler ctrl_handler;
+ 	struct v4l2_ctrl *exposure_priority;
++	struct v4l2_ctrl *power_line_frequency;
++	/* read-only exposure report of the last frame, NULL without one */
++	struct v4l2_ctrl *gain;
++	struct v4l2_ctrl *exposure;
++	/* last reported total gain (1/256 steps) and exposure (us) */
++	u32 frame_gain;
++	u32 frame_exposure_us;
+ 	struct vb2_queue vbq;
+ 	struct mutex video_lock;
+ 	unsigned int sequence;
+-	bool multiplanar;
+ 	/* capture rate in frames per second, changes under video_lock */
+ 	unsigned int frame_rate;
+ 
+@@ -295,25 +375,37 @@ struct apple_isp {
+ 	void __iomem *gpio;
+ 	void __iomem *mbox2;
+ 	void __iomem *wdt;
++	void __iomem *dapf;
+ 	struct hrtimer wdt_timer;
+ 	bool wdt_running;
+ 
+ 	struct iommu_domain *domain;
+ 	unsigned long shift;
+-	struct drm_mm iovad; /* TODO iova.c can't allocate bottom-up */
+-	u64 iova_size; /* size of the iovad range */
++	/* allocated IOVA ranges, in IOMMU pages, lowest free range first */
++	struct maple_tree iovas;
++	u64 iova_size; /* size of the range @iovas allocates from */
+ 	u64 fw_iova_mask; /* see isp_fw_iova() */
+-	struct mutex iovad_lock;
+ 
+ 	struct isp_firmware {
++		u64 heap_base;
+ 		u64 heap_top;
++		u64 data_top; /* 0 unless the bootloader loads the data */
+ 	} fw;
+ 	/* changes under video_lock once the video device is registered */
+ 	enum isp_fw_state fw_state;
++	/* the camera was detected; until then a deferred start is pending */
++	bool camera_detected;
++	/* configurations the firmware has, once a deferred start detected them */
++	u32 num_fw_presets;
+ 
+ 	struct isp_surf *ipc_surf;
+ 	struct isp_surf *extra_surf;
+ 	struct isp_surf *data_surf;
++	struct isp_surf *main_tail_surf;
++	/* With hw->fw_restore: the firmware data segment and its copy */
++	void *fw_data;
++	void *fw_data_copy;
++	size_t fw_data_size;
+ 	struct isp_surf *log_surf;
+ 	struct isp_surf *bt_surf;
+ 	struct isp_surf *meta_surfs[ISP_MAX_BUFFERS];
+@@ -347,16 +439,35 @@ struct apple_isp {
+ 	spinlock_t buf_lock;
+ 	struct list_head bufs_pending;
+ 	struct list_head bufs_submitted;
++	struct list_head bufs_returned;
++	u64 buffer_tag;
++	unsigned long meta_returned;
++	/*
++	 * The channel of a timed-out request that has not been answered yet,
++	 * see isp_ipc_resync(). Sends are serialized by the callers, which
++	 * share the command area.
++	 */
++	struct isp_channel *ipc_stale;
++	/*
++	 * Not even a late answer came, so where the firmware is in the ring
++	 * is unknown. Nothing is sent until the firmware is stopped, and
++	 * resident firmware cannot be started again before the next boot.
++	 */
++	bool ipc_failed;
+ };
+ 
+ struct isp_chan_ops {
+ 	int (*handle)(struct apple_isp *isp, struct isp_channel *chan);
++	/* Called after the response slot and its doorbell are published. */
++	void (*complete)(struct apple_isp *isp);
+ };
+ 
+ struct isp_buffer {
+ 	struct vb2_v4l2_buffer vb;
+ 	struct list_head link;
+ 	struct isp_surf surfs[VB2_MAX_PLANES];
++	u64 tag;
++	enum vb2_buffer_state return_state;
+ };
+ 
+ #define to_isp_buffer(x) container_of((x), struct isp_buffer, vb)
+@@ -367,6 +478,8 @@ enum {
+ 	ISP_STATE_SLEEPING,
+ };
+ 
++int apple_isp_program_dapf(struct apple_isp *isp);
++
+ #define isp_dbg(isp, fmt, ...) \
+ 	dev_dbg((isp)->dev, "[%s] " fmt, __func__, ##__VA_ARGS__)
+ 
+@@ -384,4 +497,37 @@ enum {
+ 	((isp)->hw->capture_meta_size ? ISP_CAPMETA_BUFFERS : 0)
+ #define isp_get_current_format(isp) (isp_get_format(isp, isp->current_ch))
+ 
++static inline bool isp_supports_p010(struct apple_isp *isp)
++{
++	/* Its config discovery would change formats already advertised. */
++	return isp->hw->gen == ISP_GEN_T6040 && !isp->hw->deferred_start &&
++	       isp_get_current_format(isp)->version == 0x958;
++}
++
++static inline bool isp_has_p010(struct apple_isp *isp)
++{
++	if (!isp_supports_p010(isp))
++		return false;
++	for (int i = 0; i < isp->num_presets; i++) {
++		if (isp->presets[i].p010)
++			return true;
++	}
++	return false;
++}
++
++static inline bool isp_is_p010(struct apple_isp *isp)
++{
++	return isp_get_current_format(isp)->pixelformat == V4L2_PIX_FMT_P010;
++}
++
++static inline unsigned int isp_num_rendered(struct apple_isp *isp)
++{
++	return isp_is_p010(isp) ? 2 : ISP_MAX_BUFFERS;
++}
++
++static inline unsigned int isp_num_meta(struct apple_isp *isp)
++{
++	return isp_is_p010(isp) ? 8 : ISP_MAX_BUFFERS;
++}
++
+ #endif /* __ISP_DRV_H__ */
+diff --git a/drivers/media/platform/apple/isp/isp-fw.c b/drivers/media/platform/apple/isp/isp-fw.c
+index c96681173fd0fa8463d1551fb27e92168d1401fb..28727ef24fbb68f6a1b73f2af9dd8f184452937a 100644
+--- a/drivers/media/platform/apple/isp/isp-fw.c
++++ b/drivers/media/platform/apple/isp/isp-fw.c
+@@ -6,10 +6,12 @@
+ 
+ #include <asm/io.h>
+ #include <linux/delay.h>
++#include <linux/highmem.h>
+ #include <linux/iopoll.h>
+ #include <linux/overflow.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/types.h>
++#include <linux/unaligned.h>
+ 
+ #include "isp-cam.h"
+ #include "isp-cmd.h"
+@@ -52,6 +54,11 @@ static inline u32 isp_coproc_control(struct apple_isp *isp)
+ 	return isp->hw->coproc_control ?: ISP_COPROC_CONTROL;
+ }
+ 
++static inline u32 isp_coproc_status(struct apple_isp *isp)
++{
++	return isp->hw->coproc_status ?: ISP_COPROC_STATUS;
++}
++
+ /* Wait for the firmware to write @expected to a GPIO word. */
+ static int isp_gpio_wait(struct apple_isp *isp, u32 reg, u32 expected)
+ {
+@@ -163,6 +170,7 @@ static_assert(sizeof(struct isp_firmware_bootargs) == 0x180);
+  */
+ #define ISP_H16_DESCRIPTOR_SIZE		0x200
+ #define ISP_H16_SHARED_SIZE		0xee000000ULL
++#define ISP_H16_DESC_CAM_SCHEME		0x60
+ #define ISP_H16_DESC_NO_OPTICAL_CARD_ID 0xb0
+ 
+ struct isp_firmware_bootargs_h16 {
+@@ -210,6 +218,7 @@ static const struct isp_chan_ops sm_ops = {
+ 
+ static const struct isp_chan_ops bt_ops = {
+ 	.handle = ipc_bt_handle,
++	.complete = ipc_bt_complete,
+ };
+ 
+ static irqreturn_t apple_isp_isr(int irq, void *dev)
+@@ -315,6 +324,31 @@ static int isp_reset_coproc_t8140(struct apple_isp *isp)
+ 	return 0;
+ }
+ 
++/*
++ * The T6040 firmware is started as the bootloader left it, without a reset:
++ * the coprocessor must never have run, and its reset vector must be the
++ * entry of the firmware text at the base of the heap region.
++ */
++static int isp_check_coproc_t6040(struct apple_isp *isp)
++{
++	u32 control = isp_coproc_read32(isp, isp_coproc_control(isp));
++	u64 rvbar = readq(isp->coproc + ISP_COPROC_RVBAR);
++
++	if (control) {
++		isp_err(isp, "coprocessor already started (control 0x%x)\n",
++			control);
++		return -EBUSY;
++	}
++
++	if (rvbar != (isp->fw.heap_base | 1)) {
++		isp_err(isp, "reset vector 0x%llx is not the firmware at 0x%llx\n",
++			rvbar, isp->fw.heap_base);
++		return -ENODEV;
++	}
++
++	return 0;
++}
++
+ static int isp_reset_coproc(struct apple_isp *isp)
+ {
+ 	int retries;
+@@ -323,6 +357,8 @@ static int isp_reset_coproc(struct apple_isp *isp)
+ 
+ 	if (isp->hw->gen == ISP_GEN_T8140)
+ 		return isp_reset_coproc_t8140(isp);
++	if (isp->hw->gen == ISP_GEN_T6040)
++		return isp_check_coproc_t6040(isp);
+ 
+ 	isp_coproc_write32(isp, ISP_COPROC_EDPRCR, 0x2);
+ 
+@@ -361,10 +397,47 @@ static int isp_reset_coproc(struct apple_isp *isp)
+ 	return 0;
+ }
+ 
++/*
++ * With hw->fw_restore, put the firmware memory back as the boot loader left
++ * it: the data segment from its copy, and the main memory above it cleared.
++ */
++static void isp_restore_fw_memory(struct apple_isp *isp)
++{
++	struct isp_surf *tail = isp->main_tail_surf;
++
++	if (!isp->fw_data_copy)
++		return;
++
++	memcpy(isp->fw_data, isp->fw_data_copy, isp->fw_data_size);
++	if (tail)
++		for (u32 i = 0; i < tail->num_pages; i++)
++			clear_highpage(tail->pages[i]);
++}
++
+ static void isp_firmware_shutdown_stage1(struct apple_isp *isp)
+ {
++	/* Only a coprocessor that was started has to settle and quiesce */
++	bool started = isp->hw->coproc_quiesce &&
++		       isp_coproc_read32(isp, isp_coproc_control(isp));
++	u32 val;
++
++	/* A coprocessor that powered down waits in WFI */
++	if (started &&
++	    readl_poll_timeout(isp->coproc + isp_coproc_status(isp), val,
++			       val & ISP_COPROC_IN_WFI, 100, 200 * USEC_PER_MSEC))
++		dev_warn(isp->dev, "coproc not in WFI before power-down (status 0x%x)\n",
++			 val);
++
+ 	isp_coproc_write32(isp, isp_coproc_control(isp), 0x0);
+ 
++	if (started) {
++		/* The request bit alone asks for it, and reads back once done */
++		isp_coproc_write32(isp, isp->hw->coproc_quiesce, ISP_COPROC_QUIESCED);
++		if (readl_poll_timeout(isp->coproc + isp->hw->coproc_quiesce, val,
++				       val & ISP_COPROC_QUIESCED, 10, 50 * USEC_PER_MSEC))
++			dev_warn(isp->dev, "coproc did not quiesce (0x%x)\n", val);
++	}
++
+ 	apple_isp_power_down_domains(isp);
+ }
+ 
+@@ -373,12 +446,20 @@ static int isp_firmware_boot_stage1(struct apple_isp *isp)
+ 	int err;
+ 	// u32 val;
+ 
++	isp_restore_fw_memory(isp);
++
+ 	err = apple_isp_power_up_domains(isp);
+ 	if (err < 0)
+ 		return err;
+ 
+-	/* ISP17a has no clock enable word */
+-	if (isp->hw->gen != ISP_GEN_T8140)
++	if (isp->dapf) {
++		err = apple_isp_program_dapf(isp);
++		if (err)
++			goto shutdown;
++	}
++
++	/* ISP17a and T6040 have no clock enable word */
++	if (isp->hw->gen != ISP_GEN_T8140 && isp->hw->gen != ISP_GEN_T6040)
+ 		isp_gpio_write32(isp, ISP_GPIO_CLOCK_EN, 0x1);
+ 
+ #if 0
+@@ -445,11 +526,27 @@ int apple_isp_alloc_firmware_surface(struct apple_isp *isp)
+ 	dev_dbg(isp->dev, "Data surface iova: 0x%llx\n",
+ 		(long long)isp->data_surf->iova);
+ 
++	/* Without it, the firmware faults on its first writes there. */
++	if (isp->fw.data_top && isp->fw.data_top < isp->fw.heap_top) {
++		isp->main_tail_surf =
++			isp_alloc_surface_at(isp, isp->fw.data_top,
++					     isp->fw.heap_top - isp->fw.data_top);
++		if (!isp->main_tail_surf) {
++			isp_err(isp, "failed to back main memory 0x%llx-0x%llx\n",
++				isp->fw.data_top, isp->fw.heap_top);
++			isp_free_surface(isp, isp->data_surf);
++			isp_free_surface(isp, isp->ipc_surf);
++			return -ENOMEM;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+ void apple_isp_free_firmware_surface(struct apple_isp *isp)
+ {
++	if (isp->main_tail_surf)
++		isp_free_surface(isp, isp->main_tail_surf);
+ 	isp_free_surface(isp, isp->data_surf);
+ 	isp_free_surface(isp, isp->ipc_surf);
+ }
+@@ -491,12 +588,14 @@ static void isp_write_bootargs_h16(struct apple_isp *isp, void *virt,
+ 	memset(&args, 0, sizeof(args));
+ 	args.ipc_iova = isp->ipc_surf->iova;
+ 	args.shared_base = isp->fw.heap_top & 0xffffffff;
+-	args.shared_size = ISP_H16_SHARED_SIZE;
++	args.shared_size = isp->hw->shared_size ?: ISP_H16_SHARED_SIZE;
+ 	args.extra_iova = isp->extra_surf->iova;
+ 	args.extra_size = isp->extra_surf->size;
+ 	args.platform_id = isp->platform_id;
+ 	args.ipc_queue_size = (u64)args_offset + 1;
+ 	args.unk_68 = 0x40;
++	put_unaligned_le64(isp->cam_connections_scheme,
++			   &args.descriptor[ISP_H16_DESC_CAM_SCHEME]);
+ 	args.descriptor[ISP_H16_DESC_NO_OPTICAL_CARD_ID] = 1;
+ 	memcpy(virt, &args, sizeof(args));
+ }
+@@ -789,26 +888,26 @@ static int isp_firmware_boot_stage3(struct apple_isp *isp)
+ 
+ static int isp_stop_command_processor(struct apple_isp *isp)
+ {
+-#if 0
+-	int res = isp_cmd_stop(isp, 0);
+-	if (res) {
+-		isp_err(isp, "isp_cmd_stop() failed\n");
+-		return res;
+-	}
++	int res, ret;
+ 
+-	/* Wait for ISP_GPIO_0 to 0xf7fbdff9 -> 0x8042006 */
+ 	isp_gpio_write32(isp, ISP_GPIO_0, 0xf7fbdff9);
+ 
+-	isp_cmd_power_down(isp);
+-#else
+-	isp_gpio_write32(isp, ISP_GPIO_0, 0xf7fbdff9);
+-
+-	int res = isp_cmd_suspend(isp);
++	/*
++	 * Firmware that starts again (hw->fw_restore) is stopped for good:
++	 * STOP also powers the camera module down, which SUSPEND leaves on,
++	 * even across a reboot. POWER_DOWN follows even if STOP failed.
++	 */
++	if (isp->hw->fw_restore) {
++		res = isp_cmd_stop(isp, 0);
++		ret = isp_cmd_power_down(isp);
++		res = res ?: ret;
++	} else {
++		res = isp_cmd_suspend(isp);
++	}
+ 	if (res) {
+-		isp_err(isp, "isp_cmd_suspend() failed\n");
++		isp_err(isp, "failed to stop the firmware: %d\n", res);
+ 		return res;
+ 	}
+-#endif
+ 
+ 	if (isp_gpio_wait(isp, ISP_GPIO_0, 0x8042006)) {
+ 		isp_err(isp, "never received magic number from firmware\n");
+@@ -825,12 +924,26 @@ static int isp_set_dsid_clr(struct apple_isp *isp)
+ 	int err;
+ 
+ 	/*
+-	 * The H17 firmware takes no PMU base, and its single broadcast-clear
+-	 * window in the multi-window form.
++	 * The H17 firmware takes no PMU base, and its broadcast-clear windows
++	 * in the multi-window form.
+ 	 */
+-	if (hw->fw_abi == ISP_FW_ABI_H17)
+-		return isp_cmd_set_dsid_clr_multi_bc(isp, hw->dsid_clr_base0,
++	if (hw->fw_abi == ISP_FW_ABI_H17) {
++		const u64 used[] = { hw->dsid_clr_base0, hw->dsid_clr_base1,
++				     hw->dsid_clr_base2, hw->dsid_clr_base3 };
++		u64 bases[ISP_DSID_MULTI_BC_MAX];
++		unsigned int slots = max_t(unsigned int, hw->dsid_count,
++					   hw->dsid_slots);
++
++		if (WARN_ON(hw->dsid_count > ARRAY_SIZE(used) ||
++			    slots > ARRAY_SIZE(bases)))
++			return -EINVAL;
++
++		for (unsigned int i = 0; i < slots; i++)
++			bases[i] = i < hw->dsid_count ? used[i] : U64_MAX;
++
++		return isp_cmd_set_dsid_clr_multi_bc(isp, bases, slots,
+ 						     hw->dsid_clr_range0);
++	}
+ 
+ 	err = isp_cmd_set_isp_pmu_base(isp, hw->pmu_base);
+ 	if (err)
+@@ -909,6 +1022,9 @@ static void isp_firmware_stop(struct apple_isp *isp)
+ 	isp_firmware_shutdown_stage3(isp);
+ 	isp_firmware_shutdown_stage2(isp);
+ 	isp_collect_gc_surface(isp);
++
++	/* Also leave it as loaded for a rebound driver or another kernel. */
++	isp_restore_fw_memory(isp);
+ }
+ 
+ static int isp_firmware_boot(struct apple_isp *isp)
+@@ -920,6 +1036,8 @@ static int isp_firmware_boot(struct apple_isp *isp)
+ 		/* Stage 1 stops the coprocessor and powers it down itself. */
+ 		isp_err(isp, "failed firmware boot stage 1: %d\n", err);
+ 		isp_collect_gc_surface(isp);
++		/* The firmware may have run: leave its memory as loaded. */
++		isp_restore_fw_memory(isp);
+ 		return err;
+ 	}
+ 
+@@ -977,7 +1095,8 @@ static void isp_firmware_shutdown(struct apple_isp *isp)
+  * Resident firmware (hw->resident_fw) is loaded by the bootloader and
+  * does not start again once it has been stopped: after CISP_CMD_SUSPEND,
+  * a coprocessor reset and a power cycle of its domains it never completes
+- * the first handshake. It is booted once, at probe, and runs until the
++ * the first handshake. It is booted once, at probe or with
++ * deferred_start at the first stream, and runs until the
+  * driver is unbound, probe fails or the system hibernates, also across
+  * suspend; after it has stopped the device stays unusable until the next
+  * system boot.
+@@ -998,6 +1117,10 @@ int apple_isp_firmware_boot(struct apple_isp *isp)
+ 		return -EIO;
+ 	}
+ 
++	/* The firmware starts with new rings. */
++	isp->ipc_stale = NULL;
++	isp->ipc_failed = false;
++
+ 	/* Needs to be power cycled for IOMMU to behave correctly */
+ 	err = pm_runtime_resume_and_get(isp->dev);
+ 	if (err < 0) {
+@@ -1019,7 +1142,7 @@ int apple_isp_firmware_boot(struct apple_isp *isp)
+ 	return 0;
+ }
+ 
+-/* The end of a stream or of the camera detection at probe */
++/* The end of a stream or of the camera detection */
+ void apple_isp_firmware_shutdown(struct apple_isp *isp)
+ {
+ 	if (!isp->hw->resident_fw) {
+@@ -1049,5 +1172,6 @@ void apple_isp_firmware_halt(struct apple_isp *isp)
+ 
+ 	isp_firmware_shutdown(isp);
+ 	pm_runtime_put_sync(isp->dev);
++	isp->ipc_stale = NULL;
+ 	isp->fw_state = isp->hw->resident_fw ? ISP_FW_DEAD : ISP_FW_OFF;
+ }
+diff --git a/drivers/media/platform/apple/isp/isp-iommu.c b/drivers/media/platform/apple/isp/isp-iommu.c
+index ade5a4a31f499308d20a1e5f0b9bb585e32eed97..12dbf6d47cccbbaed5c0fae6122eadd996391d63 100644
+--- a/drivers/media/platform/apple/isp/isp-iommu.c
++++ b/drivers/media/platform/apple/isp/isp-iommu.c
+@@ -56,41 +56,35 @@ static void isp_surf_vunmap(struct apple_isp *isp, struct isp_surf *surf)
+ static void isp_surf_unreserve_iova(struct apple_isp *isp,
+ 				    struct isp_surf *surf)
+ {
+-	if (surf->mm) {
+-		mutex_lock(&isp->iovad_lock);
+-		drm_mm_remove_node(surf->mm);
+-		mutex_unlock(&isp->iovad_lock);
+-		kfree(surf->mm);
+-	}
+-	surf->mm = NULL;
++	if (surf->iova_reserved)
++		mtree_erase(&isp->iovas, surf->iova >> isp->shift);
++	surf->iova_reserved = false;
+ }
+ 
++/*
++ * The IOVA range starts at the top of the firmware heap. Hand out the lowest
++ * free range of whole IOMMU pages above it.
++ */
+ static int isp_surf_reserve_iova(struct apple_isp *isp, struct isp_surf *surf)
+ {
++	unsigned long first = DIV_ROUND_UP_ULL(isp->fw.heap_top, 1ULL << isp->shift);
++	unsigned long last = ((isp->fw.heap_top + isp->iova_size) >> isp->shift) - 1;
++	unsigned long pages = DIV_ROUND_UP_ULL(surf->size, 1ULL << isp->shift);
++	unsigned long index;
+ 	int err;
+ 
+-	surf->mm = kzalloc(sizeof(*surf->mm), GFP_KERNEL);
+-	if (!surf->mm)
+-		return -ENOMEM;
+-
+-	mutex_lock(&isp->iovad_lock);
+-	err = drm_mm_insert_node_generic(&isp->iovad, surf->mm,
+-					 ALIGN(surf->size, 1UL << isp->shift),
+-					 1UL << isp->shift, 0, 0);
+-	mutex_unlock(&isp->iovad_lock);
++	err = mtree_alloc_range(&isp->iovas, &index, surf, pages, first, last,
++				GFP_KERNEL);
+ 	if (err < 0) {
+ 		dev_err(isp->dev, "failed to reserve 0x%llx of iova space\n",
+ 			surf->size);
+-		goto mm_free;
++		return err;
+ 	}
+ 
+-	surf->iova = surf->mm->start;
++	surf->iova = (dma_addr_t)index << isp->shift;
++	surf->iova_reserved = true;
+ 
+ 	return 0;
+-mm_free:
+-	kfree(surf->mm);
+-	surf->mm = NULL;
+-	return err;
+ }
+ 
+ static void isp_surf_iommu_unmap(struct apple_isp *isp, struct isp_surf *surf)
+@@ -129,7 +123,7 @@ static int isp_surf_iommu_map(struct apple_isp *isp, struct isp_surf *surf)
+ static void __isp_surf_init(struct apple_isp *isp, struct isp_surf *surf,
+ 			    u64 size, bool gc)
+ {
+-	surf->mm = NULL;
++	surf->iova_reserved = false;
+ 	surf->virt = NULL;
+ 	surf->size = ALIGN(size, 1UL << isp->shift);
+ 	surf->num_pages = surf->size >> isp->shift;
+@@ -218,6 +212,35 @@ struct isp_surf *isp_alloc_surface_vmap(struct apple_isp *isp, u64 size)
+ 	return surf;
+ }
+ 
++/* A surface at a fixed IOVA, outside the range the others come from. */
++struct isp_surf *isp_alloc_surface_at(struct apple_isp *isp, dma_addr_t iova,
++				      u64 size)
++{
++	struct isp_surf *surf;
++
++	surf = kzalloc_obj(*surf);
++	if (!surf)
++		return NULL;
++
++	__isp_surf_init(isp, surf, size, false);
++	surf->iova = iova;
++
++	if (isp_surf_alloc_pages(surf) < 0)
++		goto free_surf;
++
++	if (isp_surf_iommu_map(isp, surf) < 0)
++		goto free_pages;
++
++	refcount_set(&surf->refcount, 1);
++	return surf;
++
++free_pages:
++	isp_surf_free_pages(surf);
++free_surf:
++	kfree(surf);
++	return NULL;
++}
++
+ void isp_free_surface(struct apple_isp *isp, struct isp_surf *surf)
+ {
+ 	if (refcount_dec_and_test(&surf->refcount)) {
+@@ -262,7 +285,7 @@ int apple_isp_iommu_map_sgt(struct apple_isp *isp, struct isp_surf *surf,
+ 	ssize_t mapped;
+ 
+ 	// TODO userptr sends unaligned sizes
+-	surf->mm = NULL;
++	surf->iova_reserved = false;
+ 	surf->size = size;
+ 
+ 	err = isp_surf_reserve_iova(isp, surf);
+diff --git a/drivers/media/platform/apple/isp/isp-iommu.h b/drivers/media/platform/apple/isp/isp-iommu.h
+index a7fce2713f5841fa5fc2626f6051bf93c41acb3c..3a999a8c5b3d5b0809735f3a9b1de0113bbd26e4 100644
+--- a/drivers/media/platform/apple/isp/isp-iommu.h
++++ b/drivers/media/platform/apple/isp/isp-iommu.h
+@@ -10,6 +10,8 @@ struct isp_surf *__isp_alloc_surface(struct apple_isp *isp, u64 size, bool gc);
+ #define isp_alloc_surface(isp, size)	(__isp_alloc_surface(isp, size, false))
+ #define isp_alloc_surface_gc(isp, size) (__isp_alloc_surface(isp, size, true))
+ struct isp_surf *isp_alloc_surface_vmap(struct apple_isp *isp, u64 size);
++struct isp_surf *isp_alloc_surface_at(struct apple_isp *isp, dma_addr_t iova,
++				      u64 size);
+ int isp_surf_vmap(struct apple_isp *isp, struct isp_surf *surf);
+ void isp_free_surface(struct apple_isp *isp, struct isp_surf *surf);
+ void isp_free_released_surfaces(struct apple_isp *isp);
+diff --git a/drivers/media/platform/apple/isp/isp-ipc-test.c b/drivers/media/platform/apple/isp/isp-ipc-test.c
+index 6521cecb4cfb6c9a455a9d19c772552923861342..d7ca456055cec0c5fff5b4577cd8610724da7acd 100644
+--- a/drivers/media/platform/apple/isp/isp-ipc-test.c
++++ b/drivers/media/platform/apple/isp/isp-ipc-test.c
+@@ -144,7 +144,139 @@ static void isp_test_sm_free_log_bt(struct kunit *test)
+ 	KUNIT_EXPECT_NULL(test, t->isp->bt_surf);
+ }
+ 
++static void isp_test_command_ring_wrap(struct kunit *test)
++{
++	struct isp_sm_test *t = isp_sm_test_alloc(test);
++	struct isp_channel *chan = t->chan;
++	struct isp_message *slots;
++
++	chan->num = 8;
++	chan->virt = kunit_kcalloc(test, chan->num, sizeof(*slots), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, chan->virt);
++	slots = chan->virt;
++	chan->req.arg0 = 0x5000000;
++	isp_get_current_format(t->isp)->pixelformat = V4L2_PIX_FMT_P010;
++	for (unsigned int i = 0; i < 100000; i++) {
++		unsigned int cursor = chan->cursor;
++
++		/* Re-publication must clear the old ACK before waiting on a wrap. */
++		slots[cursor].arg0 = chan->req.arg0;
++		KUNIT_ASSERT_FALSE(test, chan_tx_done(t->isp, chan));
++		KUNIT_ASSERT_EQ(test, chan->cursor, cursor);
++		slots[cursor].arg0 |= ISP_IPC_FLAG_ACK;
++		KUNIT_ASSERT_TRUE(test, chan_tx_done(t->isp, chan));
++		KUNIT_ASSERT_EQ(test, chan->cursor, (cursor + 1) % chan->num);
++	}
++	KUNIT_EXPECT_EQ(test, chan->cursor, 0);
++}
++
++static void isp_test_late_ack_keeps_cursor(struct kunit *test)
++{
++	struct isp_sm_test *t = isp_sm_test_alloc(test);
++	struct isp_message response = { .arg0 = 0x5000001 };
++
++	isp_get_current_format(t->isp)->pixelformat = V4L2_PIX_FMT_P010;
++	t->chan->virt = &response;
++	t->chan->num = 8;
++	t->chan->req.arg0 = 0x5000000;
++	t->chan->deadline_active = true;
++	t->chan->deadline = jiffies;
++	KUNIT_EXPECT_FALSE(test, chan_tx_done(t->isp, t->chan));
++	KUNIT_EXPECT_EQ(test, t->chan->cursor, 0);
++	t->chan->deadline = jiffies + HZ;
++	KUNIT_EXPECT_TRUE(test, chan_tx_done(t->isp, t->chan));
++	KUNIT_EXPECT_EQ(test, t->chan->cursor, 1);
++}
++
++/* A P010 command ring whose slots and doorbell are plain memory */
++static struct isp_message *isp_test_command_ring(struct kunit *test,
++						 struct isp_sm_test *t)
++{
++	struct isp_channel *chan = t->chan;
++	struct isp_message *slots;
++
++	t->isp->mbox2 = (__force void __iomem *)
++		kunit_kzalloc(test, ISP_MBOX2_SIZE, GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, (__force void *)t->isp->mbox2);
++	init_waitqueue_head(&t->isp->wait);
++	isp_get_current_format(t->isp)->pixelformat = V4L2_PIX_FMT_P010;
++
++	chan->name = "IO";
++	chan->num = 8;
++	chan->doorbell = 1;
++	chan->virt = kunit_kcalloc(test, chan->num, sizeof(*slots), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, chan->virt);
++	chan->req.arg0 = 0x5000000;
++
++	return chan->virt;
++}
++
++static void isp_test_timeout_late_answer(struct kunit *test)
++{
++	struct isp_sm_test *t = isp_sm_test_alloc(test);
++	struct isp_message *slots = isp_test_command_ring(test, t);
++	struct isp_channel *chan = t->chan;
++
++	KUNIT_EXPECT_EQ(test, ipc_chan_send(t->isp, chan, 1), -ETIME);
++	KUNIT_EXPECT_PTR_EQ(test, t->isp->ipc_stale, chan);
++	KUNIT_EXPECT_FALSE(test, t->isp->ipc_failed);
++	KUNIT_EXPECT_EQ(test, chan->cursor, 0);
++
++	/* The answer comes after the deadline and is consumed by the resync. */
++	slots[0].arg0 |= ISP_IPC_FLAG_ACK;
++	KUNIT_EXPECT_EQ(test, isp_ipc_resync(t->isp), 0);
++	KUNIT_EXPECT_NULL(test, t->isp->ipc_stale);
++	KUNIT_EXPECT_EQ(test, chan->cursor, 1);
++
++	/* The next request takes the next slot; the old ACK does not answer it. */
++	KUNIT_EXPECT_EQ(test, ipc_chan_send(t->isp, chan, 1), -ETIME);
++	KUNIT_EXPECT_EQ(test, slots[1].arg0, chan->req.arg0);
++	KUNIT_EXPECT_EQ(test, chan->cursor, 1);
++	slots[1].arg0 |= ISP_IPC_FLAG_ACK;
++	KUNIT_EXPECT_EQ(test, isp_ipc_resync(t->isp), 0);
++	KUNIT_EXPECT_EQ(test, chan->cursor, 2);
++	KUNIT_EXPECT_FALSE(test, t->isp->ipc_failed);
++}
++
++static void isp_test_timeout_no_answer(struct kunit *test)
++{
++	struct isp_sm_test *t = isp_sm_test_alloc(test);
++	struct isp_message *slots = isp_test_command_ring(test, t);
++	struct isp_channel *chan = t->chan;
++
++	KUNIT_EXPECT_EQ(test, ipc_chan_send(t->isp, chan, 1), -ETIME);
++	KUNIT_EXPECT_EQ(test, isp_ipc_resync(t->isp), -EIO);
++	KUNIT_EXPECT_TRUE(test, t->isp->ipc_failed);
++	KUNIT_EXPECT_NULL(test, t->isp->ipc_stale);
++
++	/* An answer after the resync gave up admits nothing. */
++	slots[0].arg0 |= ISP_IPC_FLAG_ACK;
++	KUNIT_EXPECT_EQ(test, ipc_chan_send(t->isp, chan, 1), -EIO);
++	KUNIT_EXPECT_EQ(test, isp_ipc_resync(t->isp), -EIO);
++	KUNIT_EXPECT_EQ(test, chan->cursor, 0);
++}
++
++static void isp_test_message_payload_copy(struct kunit *test)
++{
++	struct isp_sm_test *t = isp_sm_test_alloc(test);
++	struct isp_message response = {
++		.arg0 = 0x5000001, .arg1 = 1, .arg2 = 2, .arg3 = 3,
++		.arg4 = 4, .arg5 = 5, .arg6 = 6, .arg7 = 7,
++	};
++	struct isp_message copied = {};
++
++	isp_get_current_format(t->isp)->pixelformat = V4L2_PIX_FMT_P010;
++	t->chan->virt = &response;
++	chan_read_msg_index(t->isp, t->chan, &copied, 0);
++	KUNIT_EXPECT_MEMEQ(test, &copied, &response, sizeof(response));
++}
++
+ static struct kunit_case isp_ipc_test_cases[] = {
++	KUNIT_CASE(isp_test_message_payload_copy),
++	KUNIT_CASE(isp_test_late_ack_keeps_cursor),
++	KUNIT_CASE(isp_test_timeout_late_answer),
++	KUNIT_CASE(isp_test_timeout_no_answer),
++	KUNIT_CASE(isp_test_command_ring_wrap),
+ 	KUNIT_CASE(isp_test_sm_free_releases),
+ 	KUNIT_CASE(isp_test_sm_free_alias),
+ 	KUNIT_CASE(isp_test_sm_free_unknown),
+diff --git a/drivers/media/platform/apple/isp/isp-ipc.c b/drivers/media/platform/apple/isp/isp-ipc.c
+index f709f6e3057639c9fac2ade97bdb43abcbc0d241..7b4dddf892a04482a46fea328ff921f0c4a7d2c5 100644
+--- a/drivers/media/platform/apple/isp/isp-ipc.c
++++ b/drivers/media/platform/apple/isp/isp-ipc.c
+@@ -6,10 +6,16 @@
+ #include "isp-regs.h"
+ #include "isp-fw.h"
+ 
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++#include <kunit/static_stub.h>
++#endif
++
+ #define ISP_IPC_FLAG_TERMINAL_ACK	0x3
+ /* longer firmware log lines are cut */
+ #define ISP_IPC_TERMINAL_MAX_LEN	512
+ #define ISP_IPC_BUFEXC_STAT_META_OFFSET 0x10
++/* how much longer a timed-out request may take to be answered */
++#define ISP_IPC_RESYNC_TIMEOUT		msecs_to_jiffies(1000)
+ 
+ struct isp_sm_deferred_work {
+ 	struct work_struct work;
+@@ -66,7 +72,17 @@ static inline void chan_read_msg_index(struct apple_isp *isp,
+ 				       struct isp_channel *chan,
+ 				       struct isp_message *msg, u32 index)
+ {
+-	memcpy(msg, chan_msg_virt(chan, index), sizeof(*msg));
++	if (isp_is_p010(isp)) {
++		u64 *slot = chan_msg_virt(chan, index);
++		u64 arg0 = READ_ONCE(*slot);
++
++		/* Acquire validity before consuming the firmware-owned payload. */
++		dma_rmb();
++		memcpy(msg, slot, sizeof(*msg));
++		msg->arg0 = arg0;
++	} else {
++		memcpy(msg, chan_msg_virt(chan, index), sizeof(*msg));
++	}
+ }
+ 
+ static inline void chan_read_msg(struct apple_isp *isp,
+@@ -124,6 +140,8 @@ static int chan_handle_once(struct apple_isp *isp, struct isp_channel *chan)
+ 	isp_mbox2_write32(isp, ISP_MBOX2_IRQ_DOORBELL, chan->doorbell);
+ 
+ 	chan_update_cursor(chan);
++	if (chan->ops->complete)
++		chan->ops->complete(isp);
+ 
+ 	return 0;
+ }
+@@ -139,10 +157,12 @@ static inline bool chan_rx_done(struct apple_isp *isp, struct isp_channel *chan)
+ 
+ int ipc_chan_handle(struct apple_isp *isp, struct isp_channel *chan)
+ {
++	unsigned int budget = isp_is_p010(isp) ? chan->num : UINT_MAX;
+ 	int err = 0;
+ 
+ 	mutex_lock(&chan->lock);
+-	while (1) {
++	/* A busy producer must not starve the other completion/control rings. */
++	while (budget--) {
+ 		chan_read_msg(isp, chan, &chan->req);
+ 		if (chan_rx_done(isp, chan)) {
+ 			err = 0;
+@@ -160,6 +180,9 @@ int ipc_chan_handle(struct apple_isp *isp, struct isp_channel *chan)
+ 
+ static inline bool chan_tx_done(struct apple_isp *isp, struct isp_channel *chan)
+ {
++	if (isp_is_p010(isp) && chan->deadline_active &&
++	    time_after_eq(jiffies, chan->deadline))
++		return false;
+ 	dma_rmb();
+ 
+ 	chan_read_msg(isp, chan, &chan->rsp);
+@@ -171,11 +194,66 @@ static inline bool chan_tx_done(struct apple_isp *isp, struct isp_channel *chan)
+ 	return false;
+ }
+ 
++/*
++ * A request that timed out still owns its slot, and the firmware may answer
++ * it late. That answer must not be taken for the answer to the next request,
++ * which goes in the same slot with the same arg0, and the next request must
++ * not overwrite the command area while the firmware may still read the old
++ * one. So before anything else is written, wait once more for the late
++ * answer, for a bounded time, and consume it; the ring is then in step again.
++ * If it has not come yet, the doorbell is rung again in case the first one
++ * was missed. IO and DEBUG share a doorbell bit, so the firmware already
++ * copes with a doorbell that brings no new request. If the firmware still
++ * does not answer, where it is in the ring is unknown and nothing more is
++ * sent until it is stopped.
++ */
++int isp_ipc_resync(struct apple_isp *isp)
++{
++	struct isp_channel *chan = isp->ipc_stale;
++
++	if (isp->ipc_failed)
++		return -EIO;
++	if (!chan)
++		return 0;
++
++	isp->ipc_stale = NULL;
++	chan->deadline_active = false;
++	if (!chan_tx_done(isp, chan)) {
++		isp_mbox2_write32(isp, ISP_MBOX2_IRQ_DOORBELL, chan->doorbell);
++		if (!wait_event_timeout(isp->wait, chan_tx_done(isp, chan),
++					ISP_IPC_RESYNC_TIMEOUT)) {
++			isp->ipc_failed = true;
++			dev_err(isp->dev,
++				"%s: no answer to the timed-out request, sending no more commands\n",
++				chan->name);
++			return -EIO;
++		}
++	}
++
++	dev_warn(isp->dev,
++		 "%s: timed-out request answered late, channel back in step\n",
++		 chan->name);
++
++	return 0;
++}
++
+ int ipc_chan_send(struct apple_isp *isp, struct isp_channel *chan,
+ 		  unsigned long timeout)
+ {
+ 	long t;
++	int err;
+ 
++#if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
++	KUNIT_STATIC_STUB_REDIRECT(ipc_chan_send, isp, chan, timeout);
++#endif
++	/* Callers that fill the command area resync before doing so. */
++	err = isp_ipc_resync(isp);
++	if (err)
++		return err;
++	if (isp_is_p010(isp) && timeout) {
++		chan->deadline = jiffies + timeout;
++		chan->deadline_active = true;
++	}
+ 	chan_write_msg(isp, chan, &chan->req);
+ 	dma_wmb();
+ 
+@@ -186,6 +264,9 @@ int ipc_chan_send(struct apple_isp *isp, struct isp_channel *chan,
+ 
+ 	t = wait_event_timeout(isp->wait, chan_tx_done(isp, chan), timeout);
+ 	if (t == 0) {
++		/* Resolved before the next request, see isp_ipc_resync(). */
++		if (isp_is_p010(isp))
++			isp->ipc_stale = chan;
+ 		dev_err(isp->dev,
+ 			"%s: timed out on request [0x%llx, 0x%llx, 0x%llx]\n",
+ 			chan->name, chan->req.arg0, chan->req.arg1,
+@@ -193,6 +274,7 @@ int ipc_chan_send(struct apple_isp *isp, struct isp_channel *chan,
+ 		return -ETIME;
+ 	}
+ 
++	chan->deadline_active = false;
+ 	isp_dbg(isp, "%s: request success (%ld)\n", chan->name, t);
+ 
+ 	return 0;
+diff --git a/drivers/media/platform/apple/isp/isp-ipc.h b/drivers/media/platform/apple/isp/isp-ipc.h
+index 7bc95a20054657a3b89fbf9bdb9316f7a27c0645..0c93100020baa7440ec0642d3c9dbc7183183d9f 100644
+--- a/drivers/media/platform/apple/isp/isp-ipc.h
++++ b/drivers/media/platform/apple/isp/isp-ipc.h
+@@ -21,6 +21,7 @@
+ int ipc_chan_handle(struct apple_isp *isp, struct isp_channel *chan);
+ int ipc_chan_send(struct apple_isp *isp, struct isp_channel *chan,
+ 		  unsigned long timeout);
++int isp_ipc_resync(struct apple_isp *isp);
+ 
+ int ipc_tm_handle(struct apple_isp *isp, struct isp_channel *chan);
+ int ipc_sm_handle(struct apple_isp *isp, struct isp_channel *chan);
+diff --git a/drivers/media/platform/apple/isp/isp-regs.h b/drivers/media/platform/apple/isp/isp-regs.h
+index f2f6f1c9489f46d57d565b7592eb27b3e5388855..b7f9b2fb87faa9598bd6ec6256dca113fac27667 100644
+--- a/drivers/media/platform/apple/isp/isp-regs.h
++++ b/drivers/media/platform/apple/isp/isp-regs.h
+@@ -24,6 +24,10 @@
+ #define ISP_COPROC_IRQ_MASK_5  0x1400a14
+ 
+ #define ISP_COPROC_CONTROL_T8140 0x1600044
++#define ISP_COPROC_STATUS_T8140	 0x1600048
++#define ISP_COPROC_QUIESCE_T8140 0x1600040
++/* Requests the quiesce when set, and reads back once it has happened */
++#define ISP_COPROC_QUIESCED	 BIT(25)
+ 
+ /*
+  * ISP17a (T8140) reset. The fourth fabric word is at 0xa50, off the 0x100
+@@ -40,6 +44,20 @@
+ #define ISP_COPROC_RESET_ACK_0_T8140 0x1600818
+ #define ISP_COPROC_RESET_ACK_1_T8140 0x160081c
+ 
++/*
++ * Address filter (DAPF) registers of a T8110-type DART: an array of windows,
++ * each with its inclusive start and end and three control words. Every ISP
++ * window takes the control values its ADT dapf-instance entry gives.
++ */
++#define DAPF_WINDOW_STRIDE        0x40
++#define DAPF_CTRL0                0x00
++#define DAPF_CTRL0_ISP            0x31
++#define DAPF_CTRL1                0x04
++#define DAPF_START                0x08
++#define DAPF_END                  0x10
++#define DAPF_CTRL2                0x20
++#define DAPF_CTRL2_ISP            0x1
++
+ #define ISP_MBOX_IRQ_INTERRUPT    0x00
+ #define ISP_MBOX_IRQ_ENABLE       0x04
+ #define ISP_MBOX_IRQ_ENABLE_T6031 0x08
+diff --git a/drivers/media/platform/apple/isp/isp-v4l2-test.c b/drivers/media/platform/apple/isp/isp-v4l2-test.c
+index 895a6d1299c220c00a6da07d19da24c00f25e978..88f428b3b0c2769c71bae3b5abe82f12a3861fc2 100644
+--- a/drivers/media/platform/apple/isp/isp-v4l2-test.c
++++ b/drivers/media/platform/apple/isp/isp-v4l2-test.c
+@@ -7,6 +7,7 @@
+ 
+ #include <kunit/device.h>
+ #include <kunit/test.h>
++#include <kunit/static_stub.h>
+ #include <linux/bitmap.h>
+ 
+ #define ISP_TEST_FRAME_SIZE 0x1000
+@@ -19,6 +20,8 @@ static struct apple_isp *isp_test_alloc(struct kunit *test)
+ 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, isp);
+ 
+ 	mutex_init(&isp->video_lock);
++	spin_lock_init(&isp->buf_lock);
++	INIT_LIST_HEAD(&isp->bufs_returned);
+ 	isp_get_current_format(isp)->total_size = ISP_TEST_FRAME_SIZE;
+ 
+ 	return isp;
+@@ -34,6 +37,8 @@ static void isp_test_queue_init(struct kunit *test)
+ 
+ 	KUNIT_ASSERT_EQ(test, isp_vb2_queue_init(isp), 0);
+ 	KUNIT_EXPECT_GE(test, isp->vbq.max_num_buffers, VB2_MAX_FRAME);
++	KUNIT_EXPECT_EQ(test, isp->vbq.type, V4L2_BUF_TYPE_VIDEO_CAPTURE);
++	KUNIT_EXPECT_FALSE(test, isp->vbq.is_multiplanar);
+ 	vb2_queue_release(&isp->vbq);
+ }
+ 
+@@ -99,6 +104,12 @@ static void isp_test_create_bufs_limit(struct kunit *test)
+ 	KUNIT_EXPECT_EQ(test, isp_test_setup(test, ISP_MAX_BUFFERS, &nbuffers,
+ 					     &num_planes, sizes), -ENOBUFS);
+ 
++	/* The contiguous API must refuse a second independent memory plane. */
++	nbuffers = 1;
++	num_planes = 2;
++	KUNIT_EXPECT_EQ(test, isp_test_setup(test, 0, &nbuffers, &num_planes,
++					     sizes), -EINVAL);
++
+ 	/* A plane smaller than a frame is still refused. */
+ 	nbuffers = 1;
+ 	num_planes = 1;
+@@ -107,7 +118,289 @@ static void isp_test_create_bufs_limit(struct kunit *test)
+ 					     sizes), -EINVAL);
+ }
+ 
++static const struct apple_isp_hw isp_test_t6040 = {
++	.gen = ISP_GEN_T6040,
++	.fw_abi = ISP_FW_ABI_H17,
++};
++
++static void isp_test_p010_format(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_format *fmt = isp_get_current_format(isp);
++	struct isp_preset preset = { .output_dim = { 1920, 1080 }, .p010 = true };
++	struct v4l2_format f = {};
++	unsigned int sizes[VB2_MAX_PLANES] = {};
++	unsigned int nbuffers = 16, num_planes = 0;
++
++	isp->hw = &isp_test_t6040;
++	fmt->version = 0x958;
++	KUNIT_ASSERT_EQ(test, isp_set_preset(isp, fmt, &preset, V4L2_PIX_FMT_P010), 0);
++	isp_get_sp_pix_format(isp, &f, fmt);
++	KUNIT_EXPECT_EQ(test, f.fmt.pix.pixelformat, V4L2_PIX_FMT_P010);
++	KUNIT_EXPECT_EQ(test, f.fmt.pix.bytesperline, 3840);
++	KUNIT_EXPECT_EQ(test, f.fmt.pix.sizeimage, 6220800);
++	KUNIT_EXPECT_EQ(test, fmt->plane_size[0], (size_t)4147200);
++	KUNIT_EXPECT_EQ(test, fmt->plane_size[1], (size_t)2073600);
++	KUNIT_EXPECT_EQ(test, f.fmt.pix.quantization, V4L2_QUANTIZATION_LIM_RANGE);
++
++	isp->vbq.drv_priv = isp;
++	isp_test_set_num_buffers(test, &isp->vbq, 0);
++	KUNIT_ASSERT_EQ(test,
++			isp_vb2_queue_setup(&isp->vbq, &nbuffers, &num_planes, sizes, NULL), 0);
++	KUNIT_EXPECT_EQ(test, nbuffers, 2);
++	KUNIT_EXPECT_EQ(test, num_planes, 1);
++	KUNIT_EXPECT_EQ(test, sizes[0], 6220800);
++	KUNIT_EXPECT_EQ(test, isp_num_meta(isp), 8);
++
++	preset.output_dim = (struct coord){1280, 720};
++	KUNIT_ASSERT_EQ(test, isp_set_preset(isp, fmt, &preset, V4L2_PIX_FMT_P010), 0);
++	KUNIT_EXPECT_EQ(test, fmt->strides[0], 2560);
++	KUNIT_EXPECT_EQ(test, fmt->total_size, (size_t)2764800);
++	/* NV12 remains the default and restores the existing pool capacity. */
++	KUNIT_ASSERT_EQ(test, isp_set_preset(isp, fmt, &preset, V4L2_PIX_FMT_NV12), 0);
++	KUNIT_EXPECT_EQ(test, fmt->pixelformat, V4L2_PIX_FMT_NV12);
++	KUNIT_EXPECT_EQ(test, fmt->total_size, (size_t)1382400);
++	KUNIT_EXPECT_EQ(test, isp_num_rendered(isp), ISP_MAX_BUFFERS);
++	KUNIT_EXPECT_EQ(test, isp_num_meta(isp), ISP_MAX_BUFFERS);
++
++}
++
++static void isp_test_p010_admission(struct kunit *test)
++{
++	static const struct apple_isp_hw neo = { .gen = ISP_GEN_T8140 };
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_format *fmt = isp_get_current_format(isp);
++	struct isp_preset preset = { .output_dim = {1280, 720}, .p010 = true };
++	struct v4l2_fmtdesc desc = { .index = 0 };
++
++	isp->presets = &preset;
++	isp->num_presets = 1;
++	isp->hw = &isp_test_t6040;
++	fmt->version = 0x958;
++	KUNIT_ASSERT_EQ(test, isp_enum_pixelformat(isp, &desc), 0);
++	KUNIT_EXPECT_EQ(test, desc.pixelformat, V4L2_PIX_FMT_NV12);
++	desc.index = 1;
++	KUNIT_ASSERT_EQ(test, isp_enum_pixelformat(isp, &desc), 0);
++	KUNIT_EXPECT_EQ(test, desc.pixelformat, V4L2_PIX_FMT_P010);
++	desc.index = 2;
++	KUNIT_EXPECT_EQ(test, isp_enum_pixelformat(isp, &desc), -EINVAL);
++	desc.index = 1;
++	isp->hw = &neo;
++	KUNIT_EXPECT_EQ(test, isp_enum_pixelformat(isp, &desc), -EINVAL);
++	KUNIT_ASSERT_EQ(test, isp_set_preset(isp, fmt, &preset, V4L2_PIX_FMT_P010), 0);
++	KUNIT_EXPECT_EQ(test, fmt->pixelformat, V4L2_PIX_FMT_NV12);
++	KUNIT_EXPECT_EQ(test, fmt->strides[0], 1280);
++}
++
++static void isp_test_p010_completion_identity(struct kunit *test)
++{
++	struct isp_format fmt = { .plane_size = {4147200, 2073600} };
++	struct isp_buffer buf = { .surfs = {{ .iova = 0x10020000000ULL }}, .tag = 42 };
++	struct isp_buflist_buffer desc = {
++		.iovas = {0x20000000, 0x203f4800},
++		.num_planes = 2, .pool_type = CISP_POOL_TYPE_RENDERED_SCL1, .tag = 42,
++	};
++
++	KUNIT_EXPECT_TRUE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.tag--;
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.tag++;
++	desc.iovas[1]++;
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.iovas[1]--;
++	desc.iovas[0] |= BIT_ULL(40);
++	/* Reject mixed encodings, accept both exact full submitted addresses. */
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.iovas[1] |= BIT_ULL(40);
++	KUNIT_EXPECT_TRUE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.iovas[0] |= BIT_ULL(41);
++	desc.iovas[1] |= BIT_ULL(41);
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.iovas[0] = (u32)desc.iovas[0];
++	desc.iovas[1] = (u32)desc.iovas[1];
++	desc.pool_type = CISP_POOL_TYPE_RENDERED;
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++	desc.pool_type = CISP_POOL_TYPE_RENDERED_SCL1;
++	desc.num_planes = 1;
++	KUNIT_EXPECT_FALSE(test, isp_p010_buffer_matches(&fmt, &buf, &desc));
++}
++
++static void isp_test_p010_report_defers_completion(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_format *fmt = isp_get_current_format(isp);
++	struct isp_buffer *buf = kunit_kzalloc(test, sizeof(*buf), GFP_KERNEL);
++	struct {
++		u64 type, count;
++		struct isp_buflist_buffer desc;
++	} report = {
++		.type = 2, .count = 1,
++		.desc = { .iovas = {0x20000000, 0x203f4800},
++			  .num_planes = 2, .pool_type = 9, .tag = 42 },
++	};
++	struct isp_surf report_surf = {
++		.iova = 0x30000000, .size = sizeof(report), .virt = &report,
++	};
++	struct isp_channel chan = {
++		.req = { .arg0 = report_surf.iova, .arg1 = sizeof(report),
++			 .arg2 = ISP_IPC_BUFEXC_FLAG_RENDER },
++	};
++
++	KUNIT_ASSERT_NOT_NULL(test, buf);
++	fmt->pixelformat = V4L2_PIX_FMT_P010;
++	fmt->plane_size[0] = 4147200;
++	isp->fw_iova_mask = U64_MAX;
++	isp->bt_surf = &report_surf;
++	buf->surfs[0].iova = 0x10020000000ULL;
++	buf->tag = 42;
++	INIT_LIST_HEAD(&isp->bufs_submitted);
++	list_add(&buf->link, &isp->bufs_submitted);
++	/* There is no vb2 queue: completing it before the ACK would fault. */
++	KUNIT_ASSERT_EQ(test, ipc_bt_handle(isp, &chan), 0);
++	KUNIT_EXPECT_TRUE(test, list_empty(&isp->bufs_submitted));
++	KUNIT_EXPECT_PTR_EQ(test,
++			    list_first_entry(&isp->bufs_returned, struct isp_buffer, link), buf);
++	KUNIT_EXPECT_EQ(test, buf->return_state, VB2_BUF_STATE_DONE);
++	KUNIT_EXPECT_EQ(test, chan.rsp.arg0, report_surf.iova | ISP_IPC_FLAG_ACK);
++}
++
++static void isp_test_p010_mode_selection(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_preset presets[] = {
++		{ .index = 5, .output_dim = {1920, 1080} },
++		{ .index = 5, .output_dim = {1280, 720}, .p010 = true },
++		{ .index = 1, .output_dim = {4096, 3072} },
++	};
++
++	isp->hw = &isp_test_t6040;
++	isp_get_current_format(isp)->version = 0x958;
++	isp->presets = presets;
++	isp->num_presets = ARRAY_SIZE(presets);
++	KUNIT_EXPECT_PTR_EQ(test, isp_select_preset(isp, 0, 0, V4L2_PIX_FMT_P010), &presets[1]);
++	KUNIT_EXPECT_PTR_EQ(test, isp_select_preset(isp, 1920, 1080, V4L2_PIX_FMT_P010),
++			    &presets[1]);
++	KUNIT_EXPECT_PTR_EQ(test, isp_select_preset(isp, 4096, 3072, V4L2_PIX_FMT_P010),
++			    &presets[1]);
++	KUNIT_EXPECT_PTR_EQ(test, isp_select_preset(isp, 1920, 1080, V4L2_PIX_FMT_NV12),
++			    &presets[0]);
++	/* Only a matching firmware output enables the larger P010 size. */
++	presets[2].p010 = true;
++	KUNIT_EXPECT_PTR_EQ(test, isp_select_preset(isp, 4096, 3072, V4L2_PIX_FMT_P010),
++			    &presets[2]);
++}
++
++static int isp_test_buffer_ack(struct apple_isp *isp, struct isp_channel *chan,
++			       unsigned long timeout)
++{
++	unsigned int *calls = kunit_get_current_test()->priv;
++
++	(*calls)++;
++	return 0;
++}
++
++static void isp_test_imx958_last_lease_requeue(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_format *fmt = isp_get_current_format(isp);
++	struct isp_buffer *buf = kunit_kzalloc(test, sizeof(*buf), GFP_KERNEL);
++	struct isp_buffer *submitted;
++	unsigned int calls = 0;
++
++	KUNIT_ASSERT_NOT_NULL(test, buf);
++	isp->hw = &isp_test_t6040;
++	fmt->version = 0x958;
++	fmt->pixelformat = V4L2_PIX_FMT_P010;
++	fmt->num_planes = 2;
++	fmt->plane_size[0] = 1843200;
++	fmt->plane_size[1] = 921600;
++	INIT_LIST_HEAD(&isp->bufs_pending);
++	INIT_LIST_HEAD(&isp->bufs_submitted);
++	isp->cmd_virt = kunit_kzalloc(test, ISP_CMD_AREA_SIZE(0), GFP_KERNEL);
++	isp->chan_bh = kunit_kzalloc(test, sizeof(*isp->chan_bh), GFP_KERNEL);
++	KUNIT_ASSERT_NOT_NULL(test, isp->cmd_virt);
++	KUNIT_ASSERT_NOT_NULL(test, isp->chan_bh);
++	for (unsigned int i = 0; i < ISP_MAX_BUFFERS; i++) {
++		isp->meta_surfs[i] = kunit_kzalloc(test, sizeof(struct isp_surf), GFP_KERNEL);
++		KUNIT_ASSERT_NOT_NULL(test, isp->meta_surfs[i]);
++		isp->meta_surfs[i]->submitted = true;
++	}
++	isp->vbq.drv_priv = isp;
++	buf->vb.vb2_buf.vb2_queue = &isp->vbq;
++	buf->surfs[0].iova = 0x20000000;
++	set_bit(ISP_STATE_STREAMING, &isp->state);
++	test->priv = &calls;
++	kunit_activate_static_stub(test, ipc_chan_send, isp_test_buffer_ack);
++	for (unsigned int format = 0; format < 2; format++) {
++		fmt->pixelformat = format ? V4L2_PIX_FMT_NV12 : V4L2_PIX_FMT_P010;
++		calls = 0;
++		for (unsigned int i = 1; i <= 10000; i++) {
++			/* Both lists empty, as after the last completion was dequeued. */
++			isp_vb2_buf_queue(&buf->vb.vb2_buf);
++			KUNIT_ASSERT_EQ(test, calls, i);
++			if (!format)
++				KUNIT_ASSERT_EQ(test, buf->tag, (u64)i);
++			KUNIT_ASSERT_TRUE(test, list_empty(&isp->bufs_pending));
++			submitted = list_first_entry(&isp->bufs_submitted, struct isp_buffer, link);
++			KUNIT_ASSERT_PTR_EQ(test, submitted, buf);
++			list_del(&buf->link);
++		}
++	}
++}
++
++/* The exposure report is found through the section table, never past it. */
++static void isp_test_meta_exposure(struct kunit *test)
++{
++	static const struct apple_isp_hw hw = { .meta_exposure = true };
++	static const struct apple_isp_hw hw_none = { };
++	struct apple_isp *isp = isp_test_alloc(test);
++	struct isp_surf meta = { .size = 0x2000 };
++	u8 *virt = kunit_kzalloc(test, meta.size, GFP_KERNEL);
++
++	KUNIT_ASSERT_NOT_NULL(test, virt);
++	meta.virt = virt;
++	isp->hw = &hw;
++	isp->frame_gain = 256;
++
++	/* fourth table entry: the section at 0x1870 */
++	put_unaligned_le32(0x1870, virt + 0x1c);
++	put_unaligned_le32(32475, virt + 0x1870);
++	put_unaligned_le16(0x0800, virt + 0x1874);
++	put_unaligned_le16(3253, virt + 0x1876);
++	isp_meta_read_exposure(isp, &meta);
++	KUNIT_EXPECT_EQ(test, isp->frame_exposure_us, 32475);
++	KUNIT_EXPECT_EQ(test, isp->frame_gain, 3253);
++
++	/* a section that would end past the buffer is ignored */
++	put_unaligned_le32(meta.size - 4, virt + 0x1c);
++	put_unaligned_le32(1000, virt + meta.size - 4);
++	isp_meta_read_exposure(isp, &meta);
++	KUNIT_EXPECT_EQ(test, isp->frame_gain, 3253);
++
++	/* so is an unwritten section */
++	put_unaligned_le32(0x1000, virt + 0x1c);
++	isp_meta_read_exposure(isp, &meta);
++	KUNIT_EXPECT_EQ(test, isp->frame_exposure_us, 32475);
++
++	/* and firmware without the report */
++	put_unaligned_le32(0x1870, virt + 0x1c);
++	put_unaligned_le16(600, virt + 0x1876);
++	isp->hw = &hw_none;
++	isp_meta_read_exposure(isp, &meta);
++	KUNIT_EXPECT_EQ(test, isp->frame_gain, 3253);
++	isp->hw = &hw;
++	isp_meta_read_exposure(isp, &meta);
++	KUNIT_EXPECT_EQ(test, isp->frame_gain, 600);
++}
++
+ static struct kunit_case isp_v4l2_test_cases[] = {
++	KUNIT_CASE(isp_test_meta_exposure),
++	KUNIT_CASE(isp_test_imx958_last_lease_requeue),
++	KUNIT_CASE(isp_test_p010_report_defers_completion),
++	KUNIT_CASE(isp_test_p010_mode_selection),
++	KUNIT_CASE(isp_test_p010_format),
++	KUNIT_CASE(isp_test_p010_admission),
++	KUNIT_CASE(isp_test_p010_completion_identity),
+ 	KUNIT_CASE(isp_test_queue_init),
+ 	KUNIT_CASE(isp_test_reqbufs_limit),
+ 	KUNIT_CASE(isp_test_create_bufs_limit),
+diff --git a/drivers/media/platform/apple/isp/isp-v4l2.c b/drivers/media/platform/apple/isp/isp-v4l2.c
+index 072b8523279c280416b6f06d40345fc1fc4feff8..81964ab1916c9db820a1506c35c6a1a4fd3b25af 100644
+--- a/drivers/media/platform/apple/isp/isp-v4l2.c
++++ b/drivers/media/platform/apple/isp/isp-v4l2.c
+@@ -3,6 +3,7 @@
+ 
+ #include <linux/math.h>
+ #include <linux/module.h>
++#include <linux/unaligned.h>
+ 
+ #include <media/media-device.h>
+ #include <media/v4l2-common.h>
+@@ -21,24 +22,20 @@
+ 
+ #define ISP_MIN_FRAMES 2
+ #define ISP_MAX_PLANES 4
+-#define ISP_MAX_PIX_FORMATS 2
+ #define ISP_BUFFER_TIMEOUT msecs_to_jiffies(1500)
+ #define ISP_STRIDE_ALIGNMENT 64
+ 
++static void isp_vb2_set_min_buffers(struct apple_isp *isp);
++
+ /* Capture rates offered to userspace, in frames per second */
+ static const unsigned int isp_frame_rates[] = { 30, 25, 24, 20, 15 };
+ 
+-static bool multiplanar = false;
+-module_param(multiplanar, bool, 0644);
+-MODULE_PARM_DESC(multiplanar, "Enable multiplanar API");
+-
+ struct isp_buflist_buffer {
+ 	u64 iovas[ISP_MAX_PLANES];
+ 	u32 flags[ISP_MAX_PLANES];
+ 	u32 num_planes;
+ 	u32 pool_type;
+-	u32 tag;
+-	u32 pad;
++	u64 tag;
+ } __packed;
+ static_assert(sizeof(struct isp_buflist_buffer) == ISP_BUFLIST_DESC_SIZE);
+ 
+@@ -57,6 +54,77 @@ static_assert(ISP_CMD_AREA_SIZE(0) >= ISP_IPC_BUFEXC_STAT_SIZE);
+  */
+ #define ISP_BUFLIST_POOL_CAPTURE_META 2
+ 
++static bool isp_p010_buffer_matches(const struct isp_format *fmt,
++				    const struct isp_buffer *buf,
++				    const struct isp_buflist_buffer *desc)
++{
++	u64 y = buf->surfs[0].iova;
++	u64 uv = y + fmt->plane_size[0];
++	bool full = desc->iovas[0] == y && desc->iovas[1] == uv;
++	bool low = desc->iovas[0] == (u32)y && desc->iovas[1] == (u32)uv;
++
++	/* Accept the submitted pair or the zero-extended pair observed on H17. */
++	return desc->num_planes == 2 &&
++	       desc->pool_type == CISP_POOL_TYPE_RENDERED_SCL1 && (full || low) &&
++	       !desc->iovas[2] && !desc->iovas[3] && desc->tag == buf->tag;
++}
++
++/*
++ * A metadata buffer starts with a table of section offsets. On H17 firmware
++ * the fourth section opens with the frame's exposure: the integration time in
++ * microseconds (le32 at 0) and the total sensor gain in 1/256 steps, 256 for
++ * unity (le16 at 6). Observed on T6040 and T8140 with AE converging under a
++ * fixed scene and with the frame rate capping the integration time.
++ */
++#define ISP_META_SECTIONS		0x10
++#define ISP_META_SECTION_EXPOSURE	3
++#define ISP_META_EXPOSURE_TIME		0x0
++#define ISP_META_EXPOSURE_GAIN		0x6
++#define ISP_META_EXPOSURE_SIZE		0x8
++
++static void isp_meta_read_exposure(struct apple_isp *isp,
++				   const struct isp_surf *meta)
++{
++	const u8 *virt = meta->virt;
++	u32 offset, time;
++	u16 gain;
++
++	if (!isp->hw->meta_exposure || !virt)
++		return;
++
++	offset = get_unaligned_le32(virt + ISP_META_SECTIONS +
++				    4 * ISP_META_SECTION_EXPOSURE);
++	if (offset < ISP_META_SECTIONS || offset > meta->size ||
++	    meta->size - offset < ISP_META_EXPOSURE_SIZE)
++		return;
++
++	time = get_unaligned_le32(virt + offset + ISP_META_EXPOSURE_TIME);
++	gain = get_unaligned_le16(virt + offset + ISP_META_EXPOSURE_GAIN);
++	/* An unwritten section or one this layout does not describe */
++	if (!time || !gain)
++		return;
++
++	WRITE_ONCE(isp->frame_exposure_us, time);
++	WRITE_ONCE(isp->frame_gain, gain);
++}
++
++void ipc_bt_complete(struct apple_isp *isp)
++{
++	struct isp_buffer *buf, *tmp;
++	unsigned long flags, i;
++
++	/* The firmware has received its ACK before userspace can reuse a lease. */
++	spin_lock_irqsave(&isp->buf_lock, flags);
++	for_each_set_bit(i, &isp->meta_returned, ISP_MAX_BUFFERS)
++		isp->meta_surfs[i]->submitted = false;
++	isp->meta_returned = 0;
++	list_for_each_entry_safe(buf, tmp, &isp->bufs_returned, link) {
++		list_del(&buf->link);
++		vb2_buffer_done(&buf->vb.vb2_buf, buf->return_state);
++	}
++	spin_unlock_irqrestore(&isp->buf_lock, flags);
++}
++
+ int ipc_bt_handle(struct apple_isp *isp, struct isp_channel *chan)
+ {
+ 	struct isp_message *req = &chan->req, *rsp = &chan->rsp;
+@@ -96,11 +164,15 @@ int ipc_bt_handle(struct apple_isp *isp, struct isp_channel *chan)
+ 		       bufd->pool_type); */
+ 
+ 		if (bufd->pool_type == 0) {
+-			for (int j = 0; j < ARRAY_SIZE(isp->meta_surfs); j++) {
++			for (int j = 0; j < isp_num_meta(isp); j++) {
+ 				struct isp_surf *meta = isp->meta_surfs[j];
+ 				if ((u32)bufd->iovas[0] == (u32)meta->iova) {
+ 					WARN_ON(!meta->submitted);
+-					meta->submitted = false;
++					isp_meta_read_exposure(isp, meta);
++					if (isp_is_p010(isp))
++						__set_bit(j, &isp->meta_returned);
++					else
++						meta->submitted = false;
+ 				}
+ 			}
+ 		} else if (bufd->pool_type == ISP_BUFLIST_POOL_CAPTURE_META &&
+@@ -114,8 +186,10 @@ int ipc_bt_handle(struct apple_isp *isp, struct isp_channel *chan)
+ 		} else {
+ 			list_for_each_entry_safe_reverse(
+ 				buf, tmp, &isp->bufs_submitted, link) {
+-				if ((u32)buf->surfs[0].iova ==
+-				    (u32)bufd->iovas[0]) {
++				if (isp_is_p010(isp) ?
++				    isp_p010_buffer_matches(isp_get_current_format(isp),
++							    buf, bufd) :
++				    (u32)buf->surfs[0].iova == (u32)bufd->iovas[0]) {
+ 					enum vb2_buffer_state state =
+ 						VB2_BUF_STATE_ERROR;
+ 
+@@ -126,9 +200,13 @@ int ipc_bt_handle(struct apple_isp *isp, struct isp_channel *chan)
+ 					if (req->arg2 ==
+ 					    ISP_IPC_BUFEXC_FLAG_RENDER)
+ 						state = VB2_BUF_STATE_DONE;
+-					vb2_buffer_done(&buf->vb.vb2_buf,
+-							state);
+-					list_del(&buf->link);
++					if (isp_is_p010(isp)) {
++						buf->return_state = state;
++						list_move_tail(&buf->link, &isp->bufs_returned);
++					} else {
++						vb2_buffer_done(&buf->vb.vb2_buf, state);
++						list_del(&buf->link);
++					}
+ 				}
+ 			}
+ 		}
+@@ -161,12 +239,17 @@ static int isp_submit_buffers(struct apple_isp *isp, bool pre_start)
+ 	struct isp_buflist *bl = isp->cmd_virt;
+ 	struct isp_buflist_buffer *bufd = &bl->buffers[0];
+ 
++	/* Before the command area is overwritten */
++	err = isp_ipc_resync(isp);
++	if (err)
++		return err;
++
+ 	/* Clear what earlier commands and batches left in the reserved fields. */
+ 	memset(bl, 0, ISP_CMD_AREA_SIZE(isp_num_capmeta(isp)));
+ 	bl->type = 1;
+ 
+ 	spin_lock_irqsave(&isp->buf_lock, flags);
+-	for (int i = 0; i < ARRAY_SIZE(isp->meta_surfs); i++) {
++	for (int i = 0; i < isp_num_meta(isp); i++) {
+ 		struct isp_surf *meta = isp->meta_surfs[i];
+ 
+ 		if (meta->submitted)
+@@ -205,9 +288,13 @@ static int isp_submit_buffers(struct apple_isp *isp, bool pre_start)
+ 	}
+ 
+ 	/* One rendered pool per batch; the rest stays pending for the next. */
+-	while (num_rendered < ISP_MAX_BUFFERS &&
++	while (num_rendered < isp_num_rendered(isp) &&
+ 	       (buf = list_first_entry_or_null(&isp->bufs_pending,
+ 					       struct isp_buffer, link))) {
++		if (isp_is_p010(isp)) {
++			buf->tag = ++isp->buffer_tag;
++			bufd->tag = buf->tag;
++		}
+ 		bufd->num_planes = fmt->num_planes;
+ 		bufd->pool_type = isp->hw->scl1 ? CISP_POOL_TYPE_RENDERED_SCL1 :
+ 						  CISP_POOL_TYPE_RENDERED;
+@@ -249,6 +336,12 @@ static int isp_submit_buffers(struct apple_isp *isp, bool pre_start)
+ 
+ 	err = ipc_chan_send(isp, chan, ISP_BUFFER_TIMEOUT);
+ 	if (err) {
++		/*
++		 * The firmware may have taken the batch. Keep its leases owned
++		 * until the timeout is resolved, see apple_isp_stop_camera().
++		 */
++		if (isp_is_p010(isp))
++			return err;
+ 		/* If we fail, consider the buffer not submitted. */
+ 		dev_err(isp->dev,
+ 			"%s: failed to send bufs: [0x%llx, 0x%llx, 0x%llx]\n",
+@@ -269,7 +362,7 @@ static int isp_submit_buffers(struct apple_isp *isp, bool pre_start)
+ 						       &isp->bufs_pending);
+ 				}
+ 			}
+-			for (int j = 0; j < ARRAY_SIZE(isp->meta_surfs); j++) {
++			for (int j = 0; j < isp_num_meta(isp); j++) {
+ 				struct isp_surf *meta = isp->meta_surfs[j];
+ 				if (bufd->iovas[0] == meta->iova) {
+ 					meta->submitted = false;
+@@ -308,13 +401,13 @@ static int isp_vb2_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
+ 	 * REQBUFS frees the old buffers first, CREATE_BUFS adds to them, so
+ 	 * count the buffers the queue already has.
+ 	 */
+-	if (q_num_bufs >= ISP_MAX_BUFFERS)
++	if (q_num_bufs >= isp_num_rendered(isp))
+ 		return -ENOBUFS;
+ 	*nbuffers = min_t(unsigned int, *nbuffers,
+-			  ISP_MAX_BUFFERS - q_num_bufs);
++			  isp_num_rendered(isp) - q_num_bufs);
+ 
+ 	if (*num_planes) {
+-		if (sizes[0] < fmt->total_size)
++		if (*num_planes != 1 || sizes[0] < fmt->total_size)
+ 			return -EINVAL;
+ 
+ 		return 0;
+@@ -407,8 +500,23 @@ static void isp_vb2_buf_queue(struct vb2_buffer *vb)
+ 	list_add_tail(&buf->link, &isp->bufs_pending);
+ 	spin_unlock_irqrestore(&isp->buf_lock, flags);
+ 
+-	if (test_bit(ISP_STATE_STREAMING, &isp->state) && !empty)
+-		isp_submit_buffers(isp, false);
++	/* Restart an empty IMX958 queue when its last returned lease is queued. */
++	if (test_bit(ISP_STATE_STREAMING, &isp->state) &&
++	    (isp_supports_p010(isp) || !empty)) {
++		if (isp_submit_buffers(isp, false) && isp_is_p010(isp)) {
++			/*
++			 * After a timeout the leases stay owned until the
++			 * stream stops. Only firmware that did not answer at
++			 * all is stopped here, before its leases are released.
++			 */
++			if (isp->ipc_failed) {
++				apple_isp_firmware_halt(isp);
++				isp_vb2_release_buffers(isp,
++							VB2_BUF_STATE_ERROR);
++			}
++			vb2_queue_error(&isp->vbq);
++		}
++	}
+ }
+ 
+ static int apple_isp_start_streaming(struct apple_isp *isp)
+@@ -423,11 +531,12 @@ static int apple_isp_start_streaming(struct apple_isp *isp)
+ 	}
+ 
+ 	/*
+-	 * Resident firmware was not restarted, but the channel's pools are
+-	 * configured again for every stream. Metadata buffers still marked
+-	 * as submitted to the previous pools would never reach the new ones.
++	 * The channel's pools are configured again for every stream, by
++	 * resident firmware that kept running or by firmware that started
++	 * afresh. Metadata buffers still marked as submitted to the previous
++	 * pools, or to firmware that stopped, would never reach the new ones.
+ 	 */
+-	if (isp->hw->resident_fw) {
++	if (isp->hw->resident_fw || isp->hw->fw_restore) {
+ 		spin_lock_irqsave(&isp->buf_lock, flags);
+ 		for (int i = 0; i < ARRAY_SIZE(isp->meta_surfs); i++)
+ 			isp->meta_surfs[i]->submitted = false;
+@@ -484,12 +593,14 @@ static int isp_vb2_start_streaming(struct vb2_queue *q, unsigned int count)
+ 
+ 	isp->sequence = 0;
+ 
+-	/* The exposure priority is applied when the stream starts. */
++	/* The exposure controls are applied when the stream starts. */
+ 	v4l2_ctrl_grab(isp->exposure_priority, true);
++	v4l2_ctrl_grab(isp->power_line_frequency, true);
+ 
+ 	err = apple_isp_start_streaming(isp);
+ 	if (err) {
+ 		v4l2_ctrl_grab(isp->exposure_priority, false);
++		v4l2_ctrl_grab(isp->power_line_frequency, false);
+ 		isp_vb2_release_buffers(isp, VB2_BUF_STATE_QUEUED);
+ 	}
+ 
+@@ -503,6 +614,7 @@ static void isp_vb2_stop_streaming(struct vb2_queue *q)
+ 	apple_isp_stop_streaming(isp);
+ 	isp_vb2_release_buffers(isp, VB2_BUF_STATE_ERROR);
+ 	v4l2_ctrl_grab(isp->exposure_priority, false);
++	v4l2_ctrl_grab(isp->power_line_frequency, false);
+ }
+ 
+ int apple_isp_video_suspend(struct apple_isp *isp)
+@@ -565,18 +677,23 @@ static const struct vb2_ops isp_vb2_ops = {
+ };
+ 
+ static int isp_set_preset(struct apple_isp *isp, struct isp_format *fmt,
+-			  struct isp_preset *preset)
++			  struct isp_preset *preset, u32 pixelformat)
+ {
++	unsigned int bytes_per_sample;
+ 	int i;
+ 	size_t total_size;
+ 
+ 	fmt->preset = preset;
+ 
+-	/* I really fucking hope they all use NV12. */
++	/* P010 has MSB-aligned 10-bit samples in little-endian 16-bit words. */
++	fmt->pixelformat = pixelformat == V4L2_PIX_FMT_P010 &&
++			   isp_supports_p010(isp) && preset->p010 ?
++			   V4L2_PIX_FMT_P010 : V4L2_PIX_FMT_NV12;
++	bytes_per_sample = fmt->pixelformat == V4L2_PIX_FMT_P010 ? 2 : 1;
+ 	fmt->num_planes = 2;
+-	fmt->strides[0] = ALIGN(preset->output_dim.x, ISP_STRIDE_ALIGNMENT);
+-	/* UV subsampled interleaved */
+-	fmt->strides[1] = ALIGN(preset->output_dim.x, ISP_STRIDE_ALIGNMENT);
++	fmt->strides[0] = ALIGN(preset->output_dim.x * bytes_per_sample,
++				ISP_STRIDE_ALIGNMENT);
++	fmt->strides[1] = fmt->strides[0];
+ 	fmt->plane_size[0] = fmt->strides[0] * preset->output_dim.y;
+ 	fmt->plane_size[1] = fmt->strides[1] * preset->output_dim.y / 2;
+ 
+@@ -589,17 +706,25 @@ static int isp_set_preset(struct apple_isp *isp, struct isp_format *fmt,
+ }
+ 
+ static struct isp_preset *isp_select_preset(struct apple_isp *isp, u32 width,
+-				     u32 height)
++				     u32 height, u32 pixelformat)
+ {
+ 	struct isp_preset *preset, *best = &isp->presets[0];
+ 	int i, score, best_score = INT_MAX;
+ 
+-	/* Default if no dimensions */
+-	if (width == 0 || height == 0)
+-		return &isp->presets[0];
++	bool p010 = pixelformat == V4L2_PIX_FMT_P010 && isp_has_p010(isp);
++
++	/* An unspecified P010 size selects the processed 720p preview first. */
++	if (width == 0 || height == 0) {
++		if (!p010)
++			return &isp->presets[0];
++		width = 1280;
++		height = 720;
++	}
+ 
+ 	for (i = 0; i < isp->num_presets; i++) {
+ 		preset = &isp->presets[i];
++		if (p010 && !preset->p010)
++			continue;
+ 		score = abs((int)preset->output_dim.x - (int)width) +
+ 		abs((int)preset->output_dim.y - (int)height);
+ 		if (score < best_score) {
+@@ -623,44 +748,47 @@ static int isp_vidioc_querycap(struct file *file, void *priv,
+ 	return 0;
+ }
+ 
++static int isp_enum_pixelformat(struct apple_isp *isp, struct v4l2_fmtdesc *f)
++{
++	/* Browser/WebRTC compatibility: the shipped first format remains NV12. */
++	if (!f->index)
++		f->pixelformat = V4L2_PIX_FMT_NV12;
++	else if (f->index == 1 && isp_has_p010(isp))
++		f->pixelformat = V4L2_PIX_FMT_P010;
++	else
++		return -EINVAL;
++	return 0;
++}
++
+ static int isp_vidioc_enum_format(struct file *file, void *fh,
+ 				  struct v4l2_fmtdesc *f)
+ {
+-	struct apple_isp *isp = video_drvdata(file);
+-
+-	if (f->index >= ISP_MAX_PIX_FORMATS)
+-		return -EINVAL;
+-
+-	switch (f->index) {
+-	case 0:
+-		f->pixelformat = V4L2_PIX_FMT_NV12;
+-		break;
+-	case 1:
+-		if (!isp->multiplanar)
+-			return -EINVAL;
+-		f->pixelformat = V4L2_PIX_FMT_NV12M;
+-		break;
+-	default:
+-		return -EINVAL;
+-	}
+-
+-	return 0;
++	return isp_enum_pixelformat(video_drvdata(file), f);
+ }
+ 
+ static int isp_vidioc_enum_framesizes(struct file *file, void *fh,
+ 				      struct v4l2_frmsizeenum *f)
+ {
+ 	struct apple_isp *isp = video_drvdata(file);
++	struct isp_preset *preset = NULL;
++	u32 index = 0;
+ 
+-	if (f->index >= isp->num_presets)
++	if (f->pixel_format != V4L2_PIX_FMT_NV12 &&
++	    !(f->pixel_format == V4L2_PIX_FMT_P010 && isp_has_p010(isp)))
+ 		return -EINVAL;
+ 
+-	if ((f->pixel_format != V4L2_PIX_FMT_NV12) &&
+-	    (f->pixel_format != V4L2_PIX_FMT_NV12M))
++	for (int i = 0; i < isp->num_presets; i++) {
++		if (f->pixel_format == V4L2_PIX_FMT_P010 && !isp->presets[i].p010)
++			continue;
++		if (index++ == f->index) {
++			preset = &isp->presets[i];
++			break;
++		}
++	}
++	if (!preset)
+ 		return -EINVAL;
+-
+-	f->discrete.width = isp->presets[f->index].output_dim.x;
+-	f->discrete.height = isp->presets[f->index].output_dim.y;
++	f->discrete.width = preset->output_dim.x;
++	f->discrete.height = preset->output_dim.y;
+ 	f->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+ 
+ 	return 0;
+@@ -676,10 +804,12 @@ static int isp_vidioc_enum_frameintervals(struct file *file, void *fh,
+ 		return -EINVAL;
+ 
+ 	if (interval->pixel_format != V4L2_PIX_FMT_NV12 &&
+-	    interval->pixel_format != V4L2_PIX_FMT_NV12M)
++	    !(interval->pixel_format == V4L2_PIX_FMT_P010 && isp_has_p010(isp)))
+ 		return -EINVAL;
+ 
+ 	for (i = 0; i < isp->num_presets; i++) {
++		if (interval->pixel_format == V4L2_PIX_FMT_P010 && !isp->presets[i].p010)
++			continue;
+ 		if (isp->presets[i].output_dim.x == interval->width &&
+ 		    isp->presets[i].output_dim.y == interval->height)
+ 			break;
+@@ -726,29 +856,12 @@ static inline void isp_get_sp_pix_format(struct apple_isp *isp,
+ 	f->fmt.pix.sizeimage = fmt->total_size;
+ 
+ 	f->fmt.pix.field = V4L2_FIELD_NONE;
+-	f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
++	f->fmt.pix.pixelformat = fmt->pixelformat;
+ 	f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
+ 	f->fmt.pix.ycbcr_enc = V4L2_YCBCR_ENC_709;
+ 	f->fmt.pix.xfer_func = V4L2_XFER_FUNC_709;
+-}
+-
+-static inline void isp_get_mp_pix_format(struct apple_isp *isp,
+-					 struct v4l2_format *f,
+-					 struct isp_format *fmt)
+-{
+-	f->fmt.pix_mp.width = fmt->preset->output_dim.x;
+-	f->fmt.pix_mp.height = fmt->preset->output_dim.y;
+-	f->fmt.pix_mp.num_planes = fmt->num_planes;
+-	for (int i = 0; i < fmt->num_planes; i++) {
+-		f->fmt.pix_mp.plane_fmt[i].sizeimage = fmt->plane_size[i];
+-		f->fmt.pix_mp.plane_fmt[i].bytesperline = fmt->strides[i];
+-	}
+-
+-	f->fmt.pix_mp.field = V4L2_FIELD_NONE;
+-	f->fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12M;
+-	f->fmt.pix_mp.colorspace = V4L2_COLORSPACE_REC709;
+-	f->fmt.pix_mp.ycbcr_enc = V4L2_YCBCR_ENC_709;
+-	f->fmt.pix_mp.xfer_func = V4L2_XFER_FUNC_709;
++	if (fmt->pixelformat == V4L2_PIX_FMT_P010)
++		f->fmt.pix.quantization = V4L2_QUANTIZATION_LIM_RANGE;
+ }
+ 
+ static int isp_vidioc_get_format(struct file *file, void *fh,
+@@ -774,14 +887,16 @@ static int isp_vidioc_set_format(struct file *file, void *fh,
+ 	if (vb2_is_busy(&isp->vbq))
+ 		return -EBUSY;
+ 
+-	preset = isp_select_preset(isp, f->fmt.pix.width, f->fmt.pix.height);
+-	err = isp_set_preset(isp, fmt, preset);
++	preset = isp_select_preset(isp, f->fmt.pix.width, f->fmt.pix.height,
++				   f->fmt.pix.pixelformat);
++	err = isp_set_preset(isp, fmt, preset, f->fmt.pix.pixelformat);
+ 	if (err)
+ 		return err;
+ 
+ 	isp_get_sp_pix_format(isp, f, fmt);
+ 
+ 	isp->vbq.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
++	isp_vb2_set_min_buffers(isp);
+ 
+ 	return 0;
+ }
+@@ -794,8 +909,9 @@ static int isp_vidioc_try_format(struct file *file, void *fh,
+ 	struct isp_preset *preset;
+ 	int err;
+ 
+-	preset = isp_select_preset(isp, f->fmt.pix.width, f->fmt.pix.height);
+-	err = isp_set_preset(isp, &fmt, preset);
++	preset = isp_select_preset(isp, f->fmt.pix.width, f->fmt.pix.height,
++				   f->fmt.pix.pixelformat);
++	err = isp_set_preset(isp, &fmt, preset, f->fmt.pix.pixelformat);
+ 	if (err)
+ 		return err;
+ 
+@@ -804,69 +920,6 @@ static int isp_vidioc_try_format(struct file *file, void *fh,
+ 	return 0;
+ }
+ 
+-static int isp_vidioc_get_format_mplane(struct file *file, void *fh,
+-					struct v4l2_format *f)
+-{
+-	struct apple_isp *isp = video_drvdata(file);
+-	struct isp_format *fmt = isp_get_current_format(isp);
+-
+-	if (!isp->multiplanar)
+-		return -ENOTTY;
+-
+-	isp_get_mp_pix_format(isp, f, fmt);
+-
+-	return 0;
+-}
+-
+-static int isp_vidioc_set_format_mplane(struct file *file, void *fh,
+-					struct v4l2_format *f)
+-{
+-	struct apple_isp *isp = video_drvdata(file);
+-	struct isp_format *fmt = isp_get_current_format(isp);
+-	struct isp_preset *preset;
+-	int err;
+-
+-	if (!isp->multiplanar)
+-		return -ENOTTY;
+-
+-	if (vb2_is_busy(&isp->vbq))
+-		return -EBUSY;
+-
+-	preset = isp_select_preset(isp, f->fmt.pix_mp.width,
+-				   f->fmt.pix_mp.height);
+-	err = isp_set_preset(isp, fmt, preset);
+-	if (err)
+-		return err;
+-
+-	isp_get_mp_pix_format(isp, f, fmt);
+-
+-	isp->vbq.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+-
+-	return 0;
+-}
+-
+-static int isp_vidioc_try_format_mplane(struct file *file, void *fh,
+-					struct v4l2_format *f)
+-{
+-	struct apple_isp *isp = video_drvdata(file);
+-	struct isp_format fmt = *isp_get_current_format(isp);
+-	struct isp_preset *preset;
+-	int err;
+-
+-	if (!isp->multiplanar)
+-		return -ENOTTY;
+-
+-	preset = isp_select_preset(isp, f->fmt.pix_mp.width,
+-				   f->fmt.pix_mp.height);
+-	err = isp_set_preset(isp, &fmt, preset);
+-	if (err)
+-		return err;
+-
+-	isp_get_mp_pix_format(isp, f, &fmt);
+-
+-	return 0;
+-}
+-
+ static int isp_vidioc_enum_input(struct file *file, void *fh,
+ 				 struct v4l2_input *inp)
+ {
+@@ -899,9 +952,7 @@ static int isp_vidioc_get_param(struct file *file, void *fh,
+ {
+ 	struct apple_isp *isp = video_drvdata(file);
+ 
+-	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+-	    (!isp->multiplanar ||
+-	     a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
++	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+ 		return -EINVAL;
+ 
+ 	a->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+@@ -917,9 +968,7 @@ static int isp_vidioc_set_param(struct file *file, void *fh,
+ 	struct apple_isp *isp = video_drvdata(file);
+ 	struct v4l2_fract *tpf = &a->parm.capture.timeperframe;
+ 
+-	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+-	    (!isp->multiplanar ||
+-	     a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
++	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+ 		return -EINVAL;
+ 
+ 	/* The rate is configured when the stream starts. */
+@@ -940,6 +989,27 @@ static int isp_vidioc_set_param(struct file *file, void *fh,
+ 	return 0;
+ }
+ 
++static int isp_vidioc_log_status(struct file *file, void *fh)
++{
++	struct apple_isp *isp = video_drvdata(file);
++
++	v4l2_ctrl_log_status(file, fh);
++	for (unsigned int i = 0; i < isp->num_sensor_configs; i++) {
++		const struct isp_sensor_config *config = &isp->sensor_configs[i];
++
++		v4l2_info(&isp->v4l2_dev,
++			  "sensor config %u: input %ux%u output %ux%u clock %u%s\n",
++			  i, config->input_dim.x, config->input_dim.y,
++			  config->output_dim.x, config->output_dim.y,
++			  config->sensor_clk,
++			  config->usable ? "" : " (unverified geometry)");
++		/* This explicit diagnostic ioctl replaces a probe-time parameter. */
++		print_hex_dump(KERN_INFO, "apple-isp config: ", DUMP_PREFIX_OFFSET,
++			       16, 4, config->reply, sizeof(config->reply), false);
++	}
++	return 0;
++}
++
+ static const struct v4l2_ioctl_ops isp_v4l2_ioctl_ops = {
+ 	.vidioc_querycap = isp_vidioc_querycap,
+ 
+@@ -947,9 +1017,6 @@ static const struct v4l2_ioctl_ops isp_v4l2_ioctl_ops = {
+ 	.vidioc_g_fmt_vid_cap = isp_vidioc_get_format,
+ 	.vidioc_s_fmt_vid_cap = isp_vidioc_set_format,
+ 	.vidioc_try_fmt_vid_cap = isp_vidioc_try_format,
+-	.vidioc_g_fmt_vid_cap_mplane = isp_vidioc_get_format_mplane,
+-	.vidioc_s_fmt_vid_cap_mplane = isp_vidioc_set_format_mplane,
+-	.vidioc_try_fmt_vid_cap_mplane = isp_vidioc_try_format_mplane,
+ 
+ 	.vidioc_enum_framesizes = isp_vidioc_enum_framesizes,
+ 	.vidioc_enum_frameintervals = isp_vidioc_enum_frameintervals,
+@@ -969,7 +1036,7 @@ static const struct v4l2_ioctl_ops isp_v4l2_ioctl_ops = {
+ 	.vidioc_streamon = vb2_ioctl_streamon,
+ 	.vidioc_streamoff = vb2_ioctl_streamoff,
+ 
+-	.vidioc_log_status = v4l2_ctrl_log_status,
++	.vidioc_log_status = isp_vidioc_log_status,
+ 	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
+ 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
+ };
+@@ -1001,6 +1068,7 @@ static void apple_isp_release(struct v4l2_device *v4l2_dev)
+ 
+ 	v4l2_ctrl_handler_free(&isp->ctrl_handler);
+ 	media_device_cleanup(&isp->mdev);
++	kfree(isp->sensor_configs);
+ 	kfree(isp);
+ }
+ 
+@@ -1019,6 +1087,22 @@ static void isp_free_meta_surfaces(struct apple_isp *isp)
+ 	}
+ }
+ 
++/*
++ * vb2 allocates at least min_queued_buffers + 1 buffers, and the queue may
++ * hold no more than the rendered pool (isp_vb2_queue_setup()). The P010 pool
++ * has two slots, so a P010 stream starts with one queued buffer; otherwise
++ * REQBUFS can never get the three buffers vb2 asks for and fails with ENOMEM.
++ * Only called while the queue has no buffers.
++ */
++static void isp_vb2_set_min_buffers(struct apple_isp *isp)
++{
++	struct vb2_queue *vbq = &isp->vbq;
++
++	vbq->min_queued_buffers = min_t(unsigned int, ISP_MIN_FRAMES,
++					 isp_num_rendered(isp) - 1);
++	vbq->min_reqbufs_allocation = vbq->min_queued_buffers + 1;
++}
++
+ static int isp_vb2_queue_init(struct apple_isp *isp)
+ {
+ 	struct vb2_queue *vbq = &isp->vbq;
+@@ -1037,6 +1121,53 @@ static int isp_vb2_queue_init(struct apple_isp *isp)
+ 	return vb2_queue_init(vbq);
+ }
+ 
++static int isp_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
++{
++	struct apple_isp *isp =
++		container_of(ctrl->handler, struct apple_isp, ctrl_handler);
++
++	switch (ctrl->id) {
++	case V4L2_CID_GAIN:
++		ctrl->val = READ_ONCE(isp->frame_gain);
++		return 0;
++	case V4L2_CID_EXPOSURE_ABSOLUTE:
++		/* in 100 us units */
++		ctrl->val = DIV_ROUND_CLOSEST(READ_ONCE(isp->frame_exposure_us),
++					      100);
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++static const struct v4l2_ctrl_ops isp_exposure_ctrl_ops = {
++	.g_volatile_ctrl = isp_g_volatile_ctrl,
++};
++
++/*
++ * Auto exposure picks the gain and exposure of each frame. Report the last
++ * frame's values read-only, so that userspace can follow the scene light, for
++ * example to decide when to denoise. The gain is the firmware's total sensor
++ * gain in 1/256 steps.
++ */
++static void isp_init_exposure_ctrls(struct apple_isp *isp)
++{
++	isp->frame_gain = 256;
++	isp->gain = v4l2_ctrl_new_std(&isp->ctrl_handler,
++				      &isp_exposure_ctrl_ops, V4L2_CID_GAIN,
++				      0, U16_MAX, 1, 256);
++	isp->exposure = v4l2_ctrl_new_std(&isp->ctrl_handler,
++					  &isp_exposure_ctrl_ops,
++					  V4L2_CID_EXPOSURE_ABSOLUTE,
++					  0, 10000, 1, 0);
++	if (isp->gain)
++		isp->gain->flags |= V4L2_CTRL_FLAG_READ_ONLY |
++				    V4L2_CTRL_FLAG_VOLATILE;
++	if (isp->exposure)
++		isp->exposure->flags |= V4L2_CTRL_FLAG_READ_ONLY |
++					V4L2_CTRL_FLAG_VOLATILE;
++}
++
+ int apple_isp_setup_video(struct apple_isp *isp)
+ {
+ 	struct video_device *vdev = &isp->vdev;
+@@ -1044,7 +1175,7 @@ int apple_isp_setup_video(struct apple_isp *isp)
+ 	struct isp_format *fmt = isp_get_current_format(isp);
+ 	int err;
+ 
+-	err = isp_set_preset(isp, fmt, &isp->presets[0]);
++	err = isp_set_preset(isp, fmt, &isp->presets[0], V4L2_PIX_FMT_NV12);
+ 	if (err) {
+ 		dev_err(isp->dev, "failed to set default preset: %d\n", err);
+ 		return err;
+@@ -1054,7 +1185,8 @@ int apple_isp_setup_video(struct apple_isp *isp)
+ 
+ 	for (int i = 0; i < ARRAY_SIZE(isp->meta_surfs); i++) {
+ 		isp->meta_surfs[i] =
+-			isp_alloc_surface_vmap(isp, isp->hw->meta_size);
++			isp_alloc_surface_vmap(isp, isp_has_p010(isp) ? 0x8000 :
++						   isp->hw->meta_size);
+ 		if (!isp->meta_surfs[i]) {
+ 			isp_err(isp, "failed to alloc meta surface\n");
+ 			err = -ENOMEM;
+@@ -1086,16 +1218,28 @@ int apple_isp_setup_video(struct apple_isp *isp)
+ 		goto media_cleanup;
+ 	}
+ 
+-	isp->multiplanar = multiplanar;
+-
+ 	/*
+ 	 * Auto exposure is always on. By default it holds the frame rate, as
+ 	 * V4L2 specifies; with exposure priority it may slow down in low light.
+ 	 */
+-	v4l2_ctrl_handler_init(&isp->ctrl_handler, 1);
++	v4l2_ctrl_handler_init(&isp->ctrl_handler, 4);
+ 	isp->exposure_priority =
+ 		v4l2_ctrl_new_std(&isp->ctrl_handler, NULL,
+ 				  V4L2_CID_EXPOSURE_AUTO_PRIORITY, 0, 1, 1, 0);
++	/*
++	 * The H17 firmware's auto exposure avoids mains flicker at the given
++	 * frequency. 50 Hz is the default, as on macOS when it does not know
++	 * the country; userspace sets 60 Hz where the mains runs at 60 Hz.
++	 */
++	if (isp->hw->fw_abi == ISP_FW_ABI_H17)
++		isp->power_line_frequency =
++			v4l2_ctrl_new_std_menu(&isp->ctrl_handler, NULL,
++					       V4L2_CID_POWER_LINE_FREQUENCY,
++					       V4L2_CID_POWER_LINE_FREQUENCY_60HZ,
++					       BIT(V4L2_CID_POWER_LINE_FREQUENCY_DISABLED),
++					       V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
++	if (isp->hw->meta_exposure)
++		isp_init_exposure_ctrls(isp);
+ 	if (isp->ctrl_handler.error) {
+ 		err = isp->ctrl_handler.error;
+ 		dev_err(isp->dev, "failed to create controls: %d\n", err);
+@@ -1119,8 +1263,6 @@ int apple_isp_setup_video(struct apple_isp *isp)
+ 	vdev->fops = &isp_v4l2_fops;
+ 	vdev->ioctl_ops = &isp_v4l2_ioctl_ops;
+ 	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+-	if (isp->multiplanar)
+-		vdev->device_caps |= V4L2_CAP_VIDEO_CAPTURE_MPLANE;
+ 	vdev->entity.flags = MEDIA_ENT_FL_DEFAULT;
+ 	vdev->v4l2_dev = &isp->v4l2_dev;
+ 	vdev->vfl_type = VFL_TYPE_VIDEO;
+diff --git a/drivers/media/platform/apple/isp/isp-v4l2.h b/drivers/media/platform/apple/isp/isp-v4l2.h
+index 622288296aaae0aeaa03bb2f05f50664366b418d..55135594576b2e5b7c3250797bf468e680d6d1ff 100644
+--- a/drivers/media/platform/apple/isp/isp-v4l2.h
++++ b/drivers/media/platform/apple/isp/isp-v4l2.h
+@@ -9,6 +9,7 @@
+ int apple_isp_setup_video(struct apple_isp *isp);
+ void apple_isp_remove_video(struct apple_isp *isp);
+ void apple_isp_free_video(struct apple_isp *isp);
++void ipc_bt_complete(struct apple_isp *isp);
+ int ipc_bt_handle(struct apple_isp *isp, struct isp_channel *chan);
+ 
+ int apple_isp_video_suspend(struct apple_isp *isp);

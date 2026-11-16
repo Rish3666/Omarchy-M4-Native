@@ -50,3 +50,10 @@ installer の抽出テストへ該当 entry を追加してから行う。
 自分の macOS から抽出した blob の hash/長さ/magic を手元で検証する。
 未確認の J715 用 entry や固定オフセットは作成していない。
 再配布権を確認できない proprietary blob・calibration はリポジトリにも成果物にも含めない。
+
+PR #421 取得後の補足: T8132 の SoC パラメーターは移植済みだが、upstream の
+MMIO/DAPF 根拠は J713 ADT。J715 の実機値が確定したことにはならない。
+採取ツールは ADT root の model/compatible/target-type/board-id/chip-id も hex で記録し、
+別モデルの ADT を誤用しないための照合材料を提供する。
+`segment-ranges` は起動時の firmware 配置であり、M5 の数値を埋め込まず J715 の採取値を使う。
+新ガードは J715 の STREAMON を -EACCES で拒否する。表示灯機能を提供するものではない。

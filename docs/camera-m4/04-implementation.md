@@ -1,59 +1,66 @@
 # 実装とビルド統合
 
-状態: 補助ツール **IMPLEMENTED / UNTESTED（一部実行済み）**。
-汎用 H17 前提パッチはビルド済み。T8132 ドライバー移植・DT・setfile は **NOT IMPLEMENTED / BLOCKED**。
+状態: T8132 ISP 移植と J715 撮影拒否ガードは **IMPLEMENTED / UNTESTED（実機未検証）**。
+通常・KUnit 込みの module build は成功。J715 DT と setfile は **NOT IMPLEMENTED / BLOCKED**。
 
-追加した実装:
+`patches-kernel/j715-camera/series` の適用順:
 
-- `tools/camera-m4-inspect.py`: Linux DT、モジュール、V4L2/PipeWire の状態を読み取り専用で収集。
-  任意の ADT から許可したリソース情報を抽出し、calibration を出力しない。capture device は開かない。
-- `tools/camera-m4-fetch.sh`: #421/#422/#208 を隔離 bare リポジトリへ取得。
-  T8132 の確認済みコミットを ancestry 検証し、取得した refs を保存。
-- `tools/build-j715-camera.sh`: レビュー済みの移植先カーネル Git ツリーから
-  実験用 Image/modules/DTB のオフライン tar を作成する。
-  Git にない現在の kbuild を、出所確認なしで製品ソースとして使わない。
-- `tests/test_camera_m4_inspect.py`: DT エンディアン保持・private data 除外・ADT 入力終端を検証。
+1. `0001-isp-h17-prerequisites.patch`: 固定 Aurora snapshot の汎用 H17 前提。
+2. `0002-isp-t8132-upstream.patch`: #421 の ISP 部分。T8132/DAPF/再起動・IOVA・sensor tuning・V4L2 等。
+3. `0003-j715-block-unverified-capture.patch`: J715 で privacy_blocked を設定。
+   STREAMON は firmware 起動・DMA buffer 提出より前に -EACCES を返す。
+   DT フラグや module parameter による解除手段は設けない。
+4. `0004-isp-copy-payload-within-message-object.patch`: 新 Clang の FORTIFY 警告を修正。
+   56-byte payload の読み出し元を arg1 単独のフィールドから完全な message object 内へ変更。
+   arg0 を最後に書く DMA barrier の順序は維持。隣接 slot を壊さない KUnit ケースも追加。
 
-実験用ビルド（ソースを取得・移植・レビューし、全変更を commit した後）:
+元ソースの著作権・ライセンス表記は保持している。
+T6050 の GPIO、firmware 予約物理アドレス、センサー設定は含めない。
+0002 は複数モデル向けの既存 upstream 変更を含むが、J715 固有ガードは独立させた。
+他モデルの実機回帰検証は未実施。
+
+ツール:
+
+- `camera-m4-inspect.py`: Linux/ADT のリソースを許可リストで抽出。ADT identity、segment-ranges、DAPF 等も出力する。
+  calibration や serial は出力しない。capture device は開かない。
+- `camera-m4-fetch.sh`: 専用 bare リポジトリへの #421/#422/#208 取得と ref 保存。
+- `prepare-j715-camera.py`: 対象 ISP の base hash を確認し、temp 上で全パッチを適用して最終 hash を確認。
+  成功後に元カーネルを新ディレクトリへコピーし、変更済み ISP ソースを配置する。
+  出力先の上書きと元ツリー内への再帰コピーは拒否。
+  release を -omarchy-m4-camera-test に分離し、Rust/GPU/audio の有効設定は保持する。
+- `build-j715-camera.sh`: レビュー・commit 済みの完全な kernel Git snapshot から独立した Image/modules/DTB tar をビルド。
+  Rust は olddefconfig の前に依存を検査し、olddefconfig によって無効化された場合も停止する。
+
+再現手順:
+
+```sh
+python3 tools/prepare-j715-camera.py /home/kazu/j715/kbuild /path/to/new-camera-source
+# bindgen がない現在の環境では次の事前検査が失敗する。
+make -C /path/to/new-camera-source ARCH=arm64 LLVM=1 rustavailable
+```
+
+実行済み出力は `/home/kazu/Work/camera-build/t8132-kernel-final`。
+base の ISP 全ファイルと最終 ISP の hash は manifest、パッチ hash・入力 config/Makefile hash は
+出力ツリーの camera-preparation.json に記録する。
+元 kbuild の upstream Git commit は不明であり、完全なソースの再現性まで確立したとは扱わない。
+
+フルビルドには bindgen、互換 Rust/LLVM、必要な rust-src と、レビューした完全な kernel Git snapshot が必要。
+clone 済み Aurora kernel 全体への乗り換えは、既存 M4 GPU/audio backport の互換性を保証しないので行っていない。
+ソース全体の出所を確認して commit した後は以下を使える（現状は未完了）:
 
 ```sh
 CAMERA_BUILD_JOBS=8 bash tools/build-j715-camera.sh /path/to/reviewed/kernel-git /path/to/new-camera-build
 ```
 
-`.config` は移植先ツリーで事前に準備する。外部の組み込み initramfs を指す設定は、別途の資産レビューが必要なため拒否する。ソースは清浄な Git ルートである必要がある。
-T8132 OF match がない場合は停止する。この文字列チェックは完全な依存関係や indicator の検証ではない。
-ネイティブ aarch64 / LLVM を使用。Rust 有効時は kbuild の rustavailable も確認する。
-ツールチェーン全体を固定したコンテナーで再現ビルドする必要がある。
-既存 J715 build 18 の特殊な証明書・initramfs・バイト一致条件は、この実験ツールで再現したとは主張しない。
+このビルダーは modules_install を専用 stage に限定し、実機 depmod・起動設定変更は行わない。
+外部 built-in initramfs を含む構成は追加の資産レビューが必要なため拒否する。
+未署名の実験 tar はディストリビューションの導入用パッケージではなく、initramfs/m1n1 chain の結合も未検証。
+ビルド時刻・tar 所有者・時刻を固定するが、Rust metadata と絶対パスを含むバイト一致までは未検証。
 
-`-omarchy-m4-camera-test` をリリース名へ付加し、独立ディレクトリに展開してビルドする。
-modules_install は専用 stage に限定し、depmod の実機実行はしない。
-成果物は未署名の実験用 tar。起動可能なディストリビューションパッケージではなく、
-既存 initramfs・m1n1 chain との結合も未検証。
-フルビルドと成果物再現性は未検証。SOURCE_DATE_EPOCH とアーカイブ所有者・時刻は固定するが、
-絶対パスや Rust metadata を含む再現性までは保証しない。
+一般配布時は CONTRIBUTING.md の omarchy-m4-update/channel と package release/hash 更新に従う。
+未検証 kernel を channel に登録したり、既存 PKGBUILD を変更したりはしていない。
 
-タスクの「実験用カーネルを分離する」という明示指示に従い、実験成果物は通常 channel と分離した。
-一般配布する段階では CONTRIBUTING.md に従い、omarchy-m4-update/channel で提供し、
-package release/hash、音声・映像の再認証を更新する。
-未検証 kernel を channel に登録する変更や既存 PKGBUILD の書換えは行っていない。
-
-ロールバック: 現状はシステムに何も導入していないため不要。
-作業コピーと `/home/kazu/Work/camera-build` の成果物だけを削除できる。
-将来の実機起動テスト前には、known-good kernel/modules/DTB/boot chain の hash と
-実際に起動できる復旧エントリーを別途確認する。
-その後も実験イメージを別名で配置し、承認済みの一回限りの選択から起動する。
-既定エントリー変更、NVRAM/EFI 変数更新、firmware flash は本ツールの対象外。
-
-追加の汎用前提パッチ: `patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch`。
-上流の H17/T8140 対応を含む ISP snapshot を現行の 7.1.9 ソースへ持ち込む差分。
-対象ファイルの base/upstream SHA256 は隣の manifest に保存した。
-パッチの dry-run と、更新後 ISP の依存込みモジュールビルドは成功。
-単独で J715 カメラを有効にするものではなく、DT ノードも追加しない。
-実機向け通常配布・起動試験は未実施。
-
-```sh
-# 正確な base ハッシュを manifest と照合してから、隔離コピーに適用する
-patch --dry-run -p1 -d /path/to/kernel-copy < patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch
-patch -p1 -d /path/to/kernel-copy < patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch
-```
+ロールバック: システムへインストール・ロード・起動変更をしていないため不要。
+生成した作業コピーだけを除去できる。将来の起動試験前には known-good kernel/modules/DTB/boot chain の
+hash と復旧エントリーからの実起動を確認し、別名の実験成果物を一回だけ選択して試す。
+既定 boot entry の変更、NVRAM/EFI 更新、firmware flash は行わない。

@@ -39,3 +39,8 @@ macOS で表示灯が動いたという観測だけで、Linux の表示灯制�
 
 CLI の概要: [Apple WWDC — Unified Logging and Activity Tracing](https://devstreaming-cdn.apple.com/videos/wwdc/2016/721wh2etddp4ghxhpcg/721/721_unified_logging_and_activity_tracing.pdf)。
 当該 macOS のオプションは `man log` または `/usr/bin/log help stream` でも確認できる。
+
+この手順の実施結果: IMX958、config 6、raw 3040x5760 / processed 3040x2880、
+撮影開始・停止を確認できた。ユーザーから使用中 LED 点灯・使用後消灯の報告も得た。
+setfile module/revision と Linux 側 indicator 制御方法は、このログだけでは未確定。
+同じ手順の無条件な再採取は不要。

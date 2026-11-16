@@ -25,7 +25,7 @@ T8132 のモジュールビルドに #422 のコードは不要であった。
 | firmware data | 復元なし | data reserved-memory の保存・復元 | d048a44f98da8d2b452d81c8412ea292aa0a6209 |
 | 電源停止 | T8132 非対応 | WFI/quiesce を伴う停止と再開 | 9e0ff10bec022b5ef8c505b9535632e6a12504e9 / a17e540a0df57cb4b304b15212a5f3eb5de45037 |
 | DMA/IOVA | drm_mm ベース | maple tree で IOVA 範囲を管理、IPC/buffer lease 修正を含む | d9a5c3bb53e806776f1874ed2676d2d2ee811a9f |
-| Camera sensor | J715 型番不明 | firmware の channel-info による検出経路はあるが実機未実行 | 未確定 |
+| Camera sensor | J715 の macOS ログで IMX958 を確認 | module/revision と setfile は引き続き未特定 | 実機ログ / 既存 0x958 検出経路 |
 | Firmware | bootloader が実体を準備する設計 | text/data/heap の J715 実値・setfile は未確定 | 未確定 |
 | Device Tree | J715 DTS に ISP なし | J715 の ADT が必要。M5 の固定値は流用しない | 未実装 |
 | V4L2 | 旧 module 有効、device なし | 連続 single-planar capture、NV12/P010 等を移植、実機未検証 | 7a32d672dfc9291a2d17994fd4f686b819da38b8 |
@@ -61,7 +61,7 @@ J714c の専用 GPIO 設定・点灯 readback、点灯中のみ watchdog を fee
 [installer PR #208](https://github.com/omacom/omarchy-mac-installer/pull/208) の
 cffff8b5ed2cbaa8dd52233188251e9d3791ef85 は Web 上で確認した IMX958 抽出変更。
 同 installer の Git オブジェクトは今回の取得対象に含まれていないため、全 extractor ソースのレビューは未完了。
-センサー未確定の J715 用抽出登録は追加していない。
+J715 の IMX958 は確認できたが、module/revision は未特定なので抽出登録の固定はしていない。
 
 今回再利用した ISP 履歴（上流の author と signoff は patches-kernel/j715-camera/upstream-history.txt）:
 
@@ -105,3 +105,15 @@ ISP の module build 成功だけでは、この supporting driver の機能を�
 同処理は上流 f57d9004043387ed6c437ddf0afcfcc1bb49f2fd の大きな DART 変更に含まれる。
 このコミット全体には locked root の保護・TLB・fault 処理等もあり、既存 GPU を守るため
 未検証のまま DART ドライバー全体を差し替えることはしない。必要部分の移植と実機状態確認が残る。
+
+動作ログ確認後、上流 f57d9004043387ed6c437ddf0afcfcc1bb49f2fd の static remap 部分を
+旧 7.1.9 向けに限定して backport した（patch 0005）。大規模 DART 全体の置換は行わない。
+source/target の範囲・重複・自己参照・chain を拒否し、static source を consumer が要求するのも拒否する。
+この backport は locked DART に新たな remap を設定しない（-EOPNOTSUPP）。
+既存 locked-root のコードを新たに安全化した、という主張ではない。
+DT に新 property がない既存デバイスは remap を設定しない。
+normal と KUnit 込みの module compile/link は成功したが、実機の camera DART lock/version/TLB は未確認。
+
+IMX958 用の上流 2224 と #422 の 2226 は同じ sensor ID に対応するため、
+J715 で IMX958 と分かったことだけでは使用する setfile は確定しない。
+今回のログに setfile module/revision の直接記録はない。候補の無検証インストールは行わない。

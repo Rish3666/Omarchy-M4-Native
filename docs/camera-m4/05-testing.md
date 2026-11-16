@@ -5,14 +5,14 @@
 | 検証 | 結果 |
 |---|---|
 | 実機識別 | WORKING: J715/T8132 を読み取り確認 |
-| Python 回帰テスト | 13 件成功。private data 除外、ADT identity、既存出力の保護、改変 base 拒否など |
+| Python 回帰テスト | 16 件成功。private data 除外、ADT identity、既存出力の保護、改変 base 拒否など |
 | 準備ツール | 4 パッチの適用と最終 hash 照合成功。独立した完全 kernel コピーを作成 |
 | 上流取得 | #421/#422 は通常端末で fetch 済み、固定 SHA のソースを解析 |
 | #421 ISP の通常 module build | 成功（7.1.9 の既存ヘッダー・media 依存を使用） |
 | J715 guard + IPC 修正込み通常 module build | 成功、FORTIFY 警告を解消 |
 | KUnit ケース込み module build | 成功。上流テストと追加した privacy/IPC テストをコンパイル・link |
 | KUnit 実行 | 未実施。モジュールをロードしていない |
-| フル kernel Image/modules/DTB/package | BLOCKED: bindgen 不足で Rust 事前検査失敗 |
+| フル kernel Image/modules/DTB/package | BLOCKED: bindgen と Rust 標準ライブラリ source の不足で Rust 事前検査失敗 |
 | V4L2 デバイス・フレーム | BLOCKED: ISP DT なし、表示灯未確認、撮影ガードあり |
 | PipeWire/browser | 未検証。sandbox からは PipeWire に接続できない |
 | indicator | 機構・点灯/消灯未検証。STREAMON 拒否ガードのみ実装 |
@@ -86,7 +86,7 @@ macOS 採取後の追加検証:
 
 - J715 の translated ISP MMIO は IOService の IODeviceMemory と一致。
 - ADT の DAPF 13 範囲は上流 T8132 テーブルと全一致。
-- Python テスト13件成功（address translation、FourCC、segment/DAPF 長検査、private data 除外を追加）。
+- Python テスト16件成功（address translation、FourCC、segment/DAPF 長検査、private data 除外を追加）。
 - DART resource 草案を J715 DTS と一緒に cpp/dtc でコンパイル成功。
   base/candidate を比較して既存ノードの全 property 不変と、追加3ノードが disabled であることを確認。
   各 reg/IRQ/remap/DAPF は採取値と照合した。
@@ -113,3 +113,29 @@ clang -E -P -x assembler-with-cpp -nostdinc -undef -D__DTS__ \
 
 追加で既存 IORegistry converter のテスト8件も成功した。
 DTB 比較では boot CPU と reservation map も不変であることを確認した。
+
+追加動作ログ・表示灯観測後:
+
+- IMX958 を sensorID=0x958 とモデル名の両方で確認し、typed summary へ反映した。
+- macOS の Streaming=Yes snapshot と、ログの Streaming 1 → 0 を確認した。
+- ユーザーはセンサーエリア LED の使用中点灯・終了後消灯を観測。Linux indicator の検証とは区別する。
+- DART patch 0005 の normal/KUnit 込み module build は W=1 で成功。
+  ログは `/home/kazu/Work/camera-build/dart-remap-build.log` と `dart-remap-kunit-build.log`。
+  warning は既存 kernel Clang 21.1.8 と現在の 23.1.4 の差異のみ。KUnit は未実行。
+- 5パッチの準備済み tree の全最終 hash を manifest と照合した。
+- IMX958 preview fragment の test wrapper を cpp/dtc でコンパイルした。
+  config/input は実ログと一致し、提案 crop が入力内・中央・1:1 であることを検査した。
+  wrapper の ISP node は disabled。Linux frame 取得はしていない。
+- 現在の Python 回帰テストは16件通過。
+
+DART compile の再現は、隔離ディレクトリに更新した apple-dart.c / test.c を配置し、
+Makefile に `obj-m += apple-dart.o` と `ccflags-y += -I$(srctree)/drivers/iommu` を指定して行った。
+normal は `make -C .../baseline ARCH=arm64 LLVM=1 W=1 -j8 M=.../dart-remap modules`。
+KUnit 込みは `KCFLAGS=-DCONFIG_APPLE_DART_REMAP_KUNIT_TEST=1` と、先にビルドした
+lib/kunit の exports を含む `KBUILD_EXTRA_SYMBOLS=.../pr421/Module.symvers` を指定した。
+これらは compatibility 検証用の外部 module で、実機の既存 .ko を置換してはならない。
+
+Rust 依存の追加確認では標準 core source も不在だった。scripts/rust_is_available.sh は
+bindgen 検査後にこの source の存在も要求するので、Rust compiler に対応した rust-src も必要。
+元 build の Clang 21.1.8 / Rust 1.93.1 と現在の 23.1.4 / 1.99.1 の互換性は未検証。
+現在稼働 DT に apple,remap-streams はないことを確認したが、backport の実機回帰の代わりにはならない。

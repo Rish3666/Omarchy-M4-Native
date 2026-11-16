@@ -387,18 +387,68 @@
       "virtual": true
     }
   ],
-  "sensor_model": null,
+  "sensor_model": "IMX958",
   "indicator_verified": false,
   "eic_nodes": [],
   "dapf_matches_upstream_t8132": true,
   "ioservice": {
-    "mmio_matches_adt": true,
     "ISPFirmwareVersion": "6.105",
     "ISPFirmwareLinkDate": "Oct 15 2026 - 20:38:03",
     "FirmwareLoaded": "Yes",
     "FrontCameraActive": "No",
-    "FrontCameraStreaming": "No"
+    "FrontCameraStreaming": "No",
+    "mmio_matches_adt": true
   },
   "dart_driver_has_static_remap_property": false,
-  "segment_physical_addresses_omitted": true
+  "camera_log": {
+    "sensor_ids": [
+      2392
+    ],
+    "sensor_names": [
+      "IMX958"
+    ],
+    "confirmed_sensor_model": "IMX958",
+    "modes": [
+      {
+        "sensor_id": 2392,
+        "config_index": 6,
+        "requested_fps": 30
+      }
+    ],
+    "pipeline_shapes": [
+      {
+        "raw": [
+          3040,
+          5760
+        ],
+        "processed": [
+          3040,
+          2880
+        ]
+      }
+    ],
+    "streaming_state_sequence": [
+      1,
+      0
+    ],
+    "setfile_module_revision_confirmed": false,
+    "indicator_mechanism_confirmed": false
+  },
+  "active_registry": {
+    "ISPFirmwareVersion": "6.105",
+    "ISPFirmwareLinkDate": "Oct 15 2026 - 20:38:03",
+    "FirmwareLoaded": "Yes",
+    "FrontCameraActive": "Yes",
+    "FrontCameraStreaming": "Yes"
+  },
+  "segment_physical_addresses_omitted": true,
+  "prepared_dart_driver_has_static_remap_property": true,
+  "macos_indicator_observation": {
+    "source": "user observation during Photo Booth",
+    "location": "camera sensor area",
+    "during_use": "on",
+    "after_use": "off",
+    "hardware_control_mechanism_confirmed": false,
+    "linux_verified": false
+  }
 }

@@ -56,3 +56,13 @@ origin/pr-422 は 8916070002f4dc60e1bca6995b9c52fa0131683f。
 macOS 採取後: 27.2.1（26B131）、Mac16,13/J715AP。ISP firmware 6.105 の
 ロードを IOService で確認した。Linux の firmware load 成功を意味しない。
 raw 採取ファイルは `/mnt/transfer/j715-camera-inspection` にあり、公開 Git へ追加していない。
+
+追加動作ログ: `/mnt/transfer/j715-camera-inspection/appleh16camerad-live.log` と
+AppleH16CamIn-active.txt を解析。IMX958 / config 6、撮影中の Active/Streaming=Yes を確認。
+元ログと個体 serial は Git へ追加していない。Linux の boot/kernel/modules は変更していない。
+
+ビルド依存の追加確認: rust-bindgen / rust-src は未導入。既定 sysroot は /usr で、
+/usr/lib/rustlib/src/rust/library/core/src/lib.rs は存在しない。
+Rust compiler と Clang/LLVM はインストール済みだが、元 build の toolchain とバージョンは異なる。
+既存ツールチェーンとの互換性確認も必要であり、2パッケージを揃えるだけで全ビルド成功とは断定しない。
+現在の Linux DT に apple,remap-streams property は見つからなかった。

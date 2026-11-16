@@ -1,7 +1,7 @@
 # 実装とビルド統合
 
 状態: T8132 ISP 移植と J715 撮影拒否ガードは **IMPLEMENTED / UNTESTED（実機未検証）**。
-通常・KUnit 込みの module build は成功。J715 DT と setfile は **NOT IMPLEMENTED / BLOCKED**。
+通常・KUnit 込みの module build は成功。J715 の有効な ISP DT と適合 setfile は **NOT IMPLEMENTED / BLOCKED**。
 
 `patches-kernel/j715-camera/series` の適用順:
 
@@ -13,6 +13,11 @@
 4. `0004-isp-copy-payload-within-message-object.patch`: 新 Clang の FORTIFY 警告を修正。
    56-byte payload の読み出し元を arg1 単独のフィールドから完全な message object 内へ変更。
    arg0 を最後に書く DMA barrier の順序は維持。隣接 slot を壊さない KUnit ケースも追加。
+
+5. `0005-dart-static-stream-remaps.patch`: 旧 7.1.9 DART へ unlocked static remap を限定 backport。
+   不正 pair・chain・static source の consumer 指定を拒否し、locked root への新規設定は -EOPNOTSUPP。
+   reset 後に source TCR のみへ remap を設定し、IOMMU bypass は使わない。
+   KUnit は malformed mapping、locked-root 拒否、source TCR 以外のメモリー不変を検証する。
 
 元ソースの著作権・ライセンス表記は保持している。
 T6050 の GPIO、firmware 予約物理アドレス、センサー設定は含めない。
@@ -76,3 +81,18 @@ hash と復旧エントリーからの実起動を確認し、別名の実験成
 
 この草案は既存 J715 DTS と合わせて cpp/dtc でコンパイルできた。
 既存ノードの property はすべて不変で、追加は無効な3つの DART ノードだけであることを比較確認した。
+
+追加ログ後の実装:
+
+- hardware tool に `--camera-log` / `--active-registry` を追加し、数値 ID とモデル名の一致から
+  IMX958 を識別する。片方のみ・複数 ID の混在では型番を確定しない。
+  mode/geometry/state だけを抽出し、setfile revision と indicator 方式を勝手に推定しない。
+- prepare ツールは DART C/Kconfig/新規 KUnit source の base hash も検査し、5パッチ全体の
+  適用後 hash を確認してから完全 kernel コピーを作る。
+  実行済みの最新ツリーは `/home/kazu/Work/camera-build/t8132-kernel-remap`。
+- `dts/camera-m4/j715-imx958-preview-presets.dtsi` に config 6 / processed 3040x2880 に基づく
+  1280x720 の実験 preview を追加した。crop は中央の 880,1080,1280,720 として計算した 1:1 crop。
+  **macOS で観測した出力 crop ではなく、未検証の開発用選択**。まだ有効な ISP node に組み込まない。
+
+DART の KUnit は source TCR だけを書き、隣接領域を保持することを memory-backed register で検査する構成。
+今回確認したのは test source の compile/link までで、KUnit の実行と IOMMU 実機試験は未実施。

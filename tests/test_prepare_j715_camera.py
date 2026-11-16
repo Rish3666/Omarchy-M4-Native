@@ -45,6 +45,21 @@ class PrepareCameraTests(unittest.TestCase):
                     prepare.verify_base(source)
             self.assertEqual((source / 'isp.c').read_bytes(), b'local edits')
 
+    def test_modified_supporting_driver_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'source'
+            source.mkdir()
+            (source / 'dart.c').write_bytes(b'local DART changes')
+            (root / 'source-manifest.json').write_text(json.dumps({'files': {}}))
+            manifest = {'supporting_base_sha256': {
+                'dart.c': hashlib.sha256(b'pinned DART source').hexdigest()}}
+            (root / 't8132-source-manifest.json').write_text(json.dumps(manifest))
+            with patch.object(prepare, 'PATCHES', root):
+                with self.assertRaisesRegex(ValueError, 'supporting source hash mismatch'):
+                    prepare.verify_base(source)
+            self.assertEqual((source / 'dart.c').read_bytes(), b'local DART changes')
+
 
 if __name__ == '__main__':
     unittest.main()

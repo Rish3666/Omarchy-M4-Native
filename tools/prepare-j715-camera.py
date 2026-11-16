@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Apply the pinned ISP series to a separate copy of the known 7.1.9 source."""
+"""Apply the pinned camera series to a separate copy of the known 7.1.9 source."""
 import argparse
 import hashlib
 import json
@@ -29,6 +29,14 @@ def verify_base(source):
                 raise ValueError(f'unexpected existing source: {name}')
         elif not path.is_file() or digest(path) != expected:
             raise ValueError(f'base source hash mismatch: {name}')
+    final = json.loads((PATCHES / 't8132-source-manifest.json').read_text())
+    for name, expected in final.get('supporting_base_sha256', {}).items():
+        path = source / name
+        if expected is None:
+            if path.exists():
+                raise ValueError(f'unexpected existing supporting source: {name}')
+        elif not path.is_file() or digest(path) != expected:
+            raise ValueError(f'supporting source hash mismatch: {name}')
 
 
 def prepare(source, output):
@@ -50,6 +58,11 @@ def prepare(source, output):
     with tempfile.TemporaryDirectory(prefix='j715-camera-series-') as tmp:
         staged = Path(tmp)
         shutil.copytree(source / ISP, staged / ISP)
+        for name, expected in final.get('supporting_base_sha256', {}).items():
+            if expected is not None:
+                target = staged / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source / name, target)
         for name in series:
             with (PATCHES / name).open() as patch:
                 subprocess.run(['patch', '--batch', '--forward', '-s', '-p1',

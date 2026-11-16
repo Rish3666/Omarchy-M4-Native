@@ -158,3 +158,8 @@ Author: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
 Subject: arm64: dts: apple: t604x-j614-j616: scale the 720p camera preset
 Signed-off-by: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
 Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+f57d9004043387ed6c437ddf0afcfcc1bb49f2fd
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: iommu/apple-dart: Support T8140 DARTs and firmware-owned stream roots
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>

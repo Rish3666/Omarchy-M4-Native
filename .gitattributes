@@ -29,3 +29,4 @@ patches-kernel/j715-camera/0001-isp-h17-prerequisites.patch whitespace=-blank-at
 patches-kernel/j715-camera/0002-isp-t8132-upstream.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
 patches-kernel/j715-camera/0003-j715-block-unverified-capture.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
 patches-kernel/j715-camera/0004-isp-copy-payload-within-message-object.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+patches-kernel/j715-camera/0005-dart-static-stream-remaps.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

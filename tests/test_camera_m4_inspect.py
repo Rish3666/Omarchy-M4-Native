@@ -37,8 +37,10 @@ class CameraInspectTests(unittest.TestCase):
             self.assertNotIn('calibration', result[0]['properties'])
 
     def test_adt_does_not_export_calibration(self):
-        data = node({'name': b'device-tree\0'}, [node({
+        data = node({'name': b'device-tree\0', 'model': b'J715AP\0',
+                     'serial-number': b'private'}, [node({
             'name': b'isp\0', 'reg': struct.pack('<QQ', 0x1234, 0x4000),
+            'segment-ranges': bytes(32),
             'calibration': b'private', 'serial-number': b'private',
         })])
         with tempfile.NamedTemporaryFile() as f:
@@ -46,7 +48,8 @@ class CameraInspectTests(unittest.TestCase):
             f.flush()
             result = inspect.apple_tree(f.name)
         self.assertEqual(result['nodes'][0]['path'], '/isp')
-        self.assertEqual(set(result['nodes'][0]['properties']), {'reg'})
+        self.assertEqual(set(result['nodes'][0]['properties']), {'reg', 'segment-ranges'})
+        self.assertEqual(result['identity'], {'model': b'J715AP\0'.hex()})
         self.assertEqual(len(result['sha256']), 64)
 
     def test_adt_rejects_trailing_data(self):

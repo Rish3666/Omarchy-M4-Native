@@ -15,6 +15,9 @@ PROPERTIES = {
     'iommus', 'power-domains', 'clocks', 'clock-names', 'status',
     'memory-region', 'memory-region-names', 'AAPL,phandle',
     'dart-options', '#iommu-cells', 'cil-gpio-offset', 'cil-gpio-config',
+    'device-id', 'clock-gates', 'power-gates', 'sensor-type', 'sensor-id',
+    'module-id', 'build-revision', 'segment-ranges', 'iommu-parent',
+    'dart-mapper', 'dart-remap', 'dapf-instance-0', 'firmware-name',
 }
 MATCH = re.compile(r'isp|camera|sensor|dart|exclave|(^|/)eic', re.I)
 
@@ -51,7 +54,10 @@ def apple_tree(path):
     nodes = [{'path': p, 'properties': {k: v.hex() for k, v in n['props'].items()
               if k in PROPERTIES}}
              for p, n in walk(root) if MATCH.search(p)]
-    return {'sha256': hashlib.sha256(raw).hexdigest(), 'nodes': nodes}
+    identity = {key: value.hex() for key, value in root['props'].items()
+                if key in {'model', 'compatible', 'target-type', 'board-id', 'chip-id'}}
+    return {'sha256': hashlib.sha256(raw).hexdigest(),
+            'identity': identity, 'nodes': nodes}
 
 
 def main():

@@ -36,9 +36,19 @@ scripts/config --set-str LOCALVERSION '-omarchy-m4-camera-test' \
 export KBUILD_BUILD_USER=builder KBUILD_BUILD_HOST=camera-test
 export KBUILD_BUILD_TIMESTAMP="$(git -C "$src" show -s --format=%cD HEAD)"
 export SOURCE_DATE_EPOCH="$(git -C "$src" show -s --format=%ct HEAD)"
-make ARCH=arm64 LLVM=1 olddefconfig
+# Check before olddefconfig can silently drop Rust and its dependent GPU driver.
+rust_required=false
 if grep -q '^CONFIG_RUST=y' .config; then
+    rust_required=true
+    for tool in "${RUSTC:-rustc}" "${RUSTDOC:-rustdoc}" "${BINDGEN:-bindgen}"; do
+        command -v "$tool" >/dev/null || { echo "missing Rust dependency: $tool" >&2; exit 1; }
+    done
     make ARCH=arm64 LLVM=1 rustavailable
+fi
+make ARCH=arm64 LLVM=1 olddefconfig
+if "$rust_required" && ! grep -q '^CONFIG_RUST=y' .config; then
+    echo "Rust support was lost; refusing a kernel that can break the M4 GPU" >&2
+    exit 1
 fi
 release=$(make -s ARCH=arm64 LLVM=1 kernelrelease)
 [[ $release == *-omarchy-m4-camera-test ]] || exit 1

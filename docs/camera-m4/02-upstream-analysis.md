@@ -98,3 +98,10 @@ af2676a9ee596bc94bb016d52a925ce550c46963 arm64: dts: apple: t604x-j614-j616: sca
 出所: [PR #421](https://github.com/omacom/linux-aurora/pull/421)、
 [PR #422](https://github.com/omacom/linux-aurora/pull/422)。
 集約差分なので単一 commit の cherry-pick ではない。各ファイルの hash と PR head を manifest に固定した。
+
+追加の J715 実機 ADT 解析で、上流 T8132 DAPF の13範囲が全一致した。
+一方、7.1.9 の DART ソースには apple,remap-streams の読み取り処理がないことを確認した。
+ISP の module build 成功だけでは、この supporting driver の機能を保証できない。
+同処理は上流 f57d9004043387ed6c437ddf0afcfcc1bb49f2fd の大きな DART 変更に含まれる。
+このコミット全体には locked root の保護・TLB・fault 処理等もあり、既存 GPU を守るため
+未検証のまま DART ドライバー全体を差し替えることはしない。必要部分の移植と実機状態確認が残る。

@@ -52,3 +52,7 @@ PR の追加 fetch 後: origin/pr-421 は af2676a9ee596bc94bb016d52a925ce550c469
 origin/pr-422 は 8916070002f4dc60e1bca6995b9c52fa0131683f。
 参照のみで、ユーザーの linux-aurora の作業ブランチは切り替えていない。
 フルビルド事前検査では bindgen が見つからず rustavailable が失敗した。
+
+macOS 採取後: 27.2.1（26B131）、Mac16,13/J715AP。ISP firmware 6.105 の
+ロードを IOService で確認した。Linux の firmware load 成功を意味しない。
+raw 採取ファイルは `/mnt/transfer/j715-camera-inspection` にあり、公開 Git へ追加していない。

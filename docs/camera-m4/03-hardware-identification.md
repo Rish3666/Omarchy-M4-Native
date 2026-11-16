@@ -1,59 +1,70 @@
 # J715 のハードウェア識別
 
-状態: **BLOCKED**（センサー・表示灯・ISP リソース未確定）。
+状態: **PARTIAL**。macOS の実機 IODeviceTree と IOService を解析し、ISP/DART のリソースを確認した。
+センサー型番と表示灯制御は **BLOCKED** のまま。
 
-確定: この実機は J715/T8132。稼働 Linux DT に ISP ノードがなく、
-既存 ISP モジュールに T8132 match もない。
+採取元はユーザーが用意した `/mnt/transfer/j715-camera-inspection/`。
+macOS 27.2.1（26B131）、Mac16,13 / J715AP / Apple M4。
+raw ファイルと再構成した ADT は Git に含めず、private 作業ディレクトリで解析した。
+個体 serial/calibration と、誤って固定値として使われないよう firmware の物理配置は
+公開用 `j715-resource-summary.json` から除外した。
 
-仮説: 上流 T8132 対応が J715 にも移植できる可能性はある。
-同一 SoC の J713 情報は比較資料にとどめる。
-既存 `docs/t8132-adt-audit.md` は **J713** の履歴であり、そこに記載された
-DART アドレスを J715 の確定値として採用しない。
+| 項目 | 実機採取から確認した値 |
+|---|---|
+| ISP compatible（Apple ADT） | isp,isp-generic-1 / isp,s5l8960x |
+| ISP MMIO | 0x48c000000 / 0x3ff0000 |
+| ISP 補助 MMIO | 0x380700000 / 0x18000 |
+| ISP IRQ の列 | 369, 370, 371, 372, 382 |
+| ADT sensor-type | 0x18（platform type。センサー型番ではない） |
+| DART banks | 0x48e8c0000 / 0x48e8e0000 / 0x48e900000、各 0xc000 |
+| DAPF instance 0 | ADT reg[5]、0x48e8d0000 / 0x4000 |
+| DART IRQ | 387 |
+| ISP mapper stream | 0 と 12 |
+| remap source list | 1, 2, 3, 6, 7, 10, 11 |
+| VM base / size | 0x10000000000 / 0xe0000000 |
+| DAPF windows | 13 範囲。上流 apple_isp_dapf_t8132 の順序・開始・終了と全一致 |
+| firmware（IOService） | 6.105、Oct 15 2026 - 20:38:03、FirmwareLoaded=Yes |
+| 採取時状態 | FrontCameraActive=No / FrontCameraStreaming=No |
 
-未確定: センサー/module/build revision、ISP MMIO/IRQ、DART の各 stream と filter、
-power domain、clock、reset、firmware text/data/heap の予約範囲、indicator/EIC。
-IMX958 とも IMX558 とも断定しない。既存ファイル名から実機センサーを逆算しない。
+ADT の reg は arm-io bus-relative。親 ranges を通した物理アドレスを表に示した。
+IOService の IODeviceMemory とも完全一致した。
+DART instance の先頭 FourCC は little-endian 数値であり、その後の文字列 label と扱いが異なる。
+DAPF record は52 bytes、segment-ranges record は32 bytes（size と flags は各 u32）。
+size と flags を u64 として結合してはならない。
 
-macOS での読み取り専用採取（通常起動、NVRAM/firmware の書換え不要）:
+firmware segment は __TEXT と __DATA の2件。size はそれぞれ 0xcd0000 と 0xe1c000、
+virtual 欄は 0 と 0xcd0000、remap 欄は 0x10000000000 と 0x10000cd0000。
+physical 欄は今回の macOS boot に依存する値なので Linux DT へ固定しない。
+Linux boot で予約・引渡しされる text/data/heap を別途確認する必要がある。
 
-```sh
-mkdir -p ~/Desktop/j715-camera-inspection
-cd ~/Desktop/j715-camera-inspection
-sw_vers > macos-version.txt
-system_profiler SPHardwareDataType SPCameraDataType > system-profiler.txt
-ioreg -p IODeviceTree -l -w0 > iodevicetree.txt
-ioreg -p IOService -l -w0 > ioservice.txt
-```
+PMGR の実レジスターは ISPSENS0=0x188、ISPSENS1=0x190、ISP_SYS=0x530（各 pmgr reg[0] 内）。
+ISP_CPU/FE/BE/SECURE 等は ADT 上 virtual。virtual の zero offset を実レジスターと誤認しない。
+ISP_SYS の親 AFISOCNI4 も virtual であり、完全な Linux power-domain 構成は未確定。
+clock IDs は 0x180/0x182 だが、rate と起動順の実装は未確定。
 
-これらの原本にはシリアル番号や calibration が含まれる可能性がある。公開しない。
-`SPCameraDataType` の商品名だけではセンサー型番を確定できない。
-Linux の作業ディレクトリへ自分で持ち帰った後:
+確認できなかったもの:
+
+- センサー型番、module/build revision、適合 setfile。IMX958/IMX558 のどちらとも断定しない。
+- ISP register block 内の mailbox/gpio 分割。M5 の +0x2924000 等は流用しない。
+- Linux boot での firmware handoff と heap 範囲。
+- camera-active indicator。EIC ノードや cil-gpio プロパティが見つからないことは、
+  hardware LED である証拠にはならない。
+
+IOService の AppleH16CamIn と appleh16camerad の存在は確認できたが、
+採取時は非撮影状態で、公開プロパティに sensor/module ID はなかった。
+次の追加採取は [カメラ動作ログ手順](06-macos-camera-logs.md) に従う。
+
+再現:
 
 ```sh
 python3 tools/ioreg-adt.py /path/to/iodevicetree.txt /tmp/j715-camera.adt
-python3 tools/camera-m4-inspect.py --adt /tmp/j715-camera.adt > /tmp/j715-camera-resources.json
+python3 tools/camera-m4-hardware.py /tmp/j715-camera.adt \
+  --ioservice /path/to/ioservice.txt \
+  --driver /path/to/patched-kernel/drivers/media/platform/apple/isp/isp-drv.c \
+  --dart-driver /path/to/kernel/drivers/iommu/apple-dart.c
 ```
 
-再構成 ADT は原本の binary ADT と同等とは限らない（tools/ioreg-adt.py の説明参照）。
-新ツールは許可リストのリソースだけを hex 出力する。Linux DT は big-endian、ADT は
-little-endian であり、同じ hex 表現でも解釈を混同しない。
-センサーの configuration/calibration blob は自動公開しない。
-firmware ログ・channel-info が必要な場合は非公開の手元で確認し、識別 ID のみを記録する。
-
-表示灯は **BLOCKED**。物理 LED 連動かソフト制御か未確定。
-EIC がある場合には watchdog と GPIO だけでなく、アクセス制御を含めて確認する。
-点灯の観測と、start 成功/失敗・stop・異常終了での連動を実機で確認するまで
-通常ストリーミングを有効にしない。
-
-firmware/setfile の導入は、確認済み sensor/module/revision とドライバーの要求パスを照合し、
-installer の抽出テストへ該当 entry を追加してから行う。
-自分の macOS から抽出した blob の hash/長さ/magic を手元で検証する。
-未確認の J715 用 entry や固定オフセットは作成していない。
-再配布権を確認できない proprietary blob・calibration はリポジトリにも成果物にも含めない。
-
-PR #421 取得後の補足: T8132 の SoC パラメーターは移植済みだが、upstream の
-MMIO/DAPF 根拠は J713 ADT。J715 の実機値が確定したことにはならない。
-採取ツールは ADT root の model/compatible/target-type/board-id/chip-id も hex で記録し、
-別モデルの ADT を誤用しないための照合材料を提供する。
-`segment-ranges` は起動時の firmware 配置であり、M5 の数値を埋め込まず J715 の採取値を使う。
-新ガードは J715 の STREAMON を -EACCES で拒否する。表示灯機能を提供するものではない。
+再構成 ADT は原本 binary ADT と同等とは限らない。tools/ioreg-adt.py の制約も参照する。
+新ツールは J715/Mac16,13/target-type の一致を要求し、serial/calibration を出力しない。
+firmware/setfile の抽出登録は sensor/module/revision を確認してから行う。
+proprietary blob と per-module calibration は再配布しない。

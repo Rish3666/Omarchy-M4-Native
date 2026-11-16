@@ -5,7 +5,7 @@
 | 検証 | 結果 |
 |---|---|
 | 実機識別 | WORKING: J715/T8132 を読み取り確認 |
-| Python 回帰テスト | 6 件成功。private data 除外、ADT identity、既存出力の保護、改変 base 拒否など |
+| Python 回帰テスト | 13 件成功。private data 除外、ADT identity、既存出力の保護、改変 base 拒否など |
 | 準備ツール | 4 パッチの適用と最終 hash 照合成功。独立した完全 kernel コピーを作成 |
 | 上流取得 | #421/#422 は通常端末で fetch 済み、固定 SHA のソースを解析 |
 | #421 ISP の通常 module build | 成功（7.1.9 の既存ヘッダー・media 依存を使用） |
@@ -81,3 +81,35 @@ ffmpeg -f rawvideo -pixel_format nv12 -video_size 1280x720 -i /tmp/j715-camera.n
 DART fault の不在を確認し、再開閉・中断・異常終了・suspend/resume・電源停止を試す。
 LED は open 時だけでなく STREAMON/STREAMOFF と連動することを確認する。
 最後に PipeWire、アプリ、ブラウザーを個別検証する。
+
+macOS 採取後の追加検証:
+
+- J715 の translated ISP MMIO は IOService の IODeviceMemory と一致。
+- ADT の DAPF 13 範囲は上流 T8132 テーブルと全一致。
+- Python テスト13件成功（address translation、FourCC、segment/DAPF 長検査、private data 除外を追加）。
+- DART resource 草案を J715 DTS と一緒に cpp/dtc でコンパイル成功。
+  base/candidate を比較して既存ノードの全 property 不変と、追加3ノードが disabled であることを確認。
+  各 reg/IRQ/remap/DAPF は採取値と照合した。
+- 比較用 DTB とログは `/home/kazu/Work/camera-build/macos-derived/`。
+  /boot への配置、実機への適用、再起動、撮影は行っていない。
+
+草案の構文チェックは dtbs_check や実機動作の証明ではない。
+旧 DART backend の remap 処理不足と、virtual power state/firmware handoff/indicator が残るため
+フル初期化・撮影は引き続き未検証。
+
+今回の環境での草案コンパイル再現例（出力は /tmp のみ）:
+
+```sh
+cat > /tmp/j715-camera-resource-check.dts <<'EOF'
+#include "/home/kazu/j715/kbuild/arch/arm64/boot/dts/apple/t8132-j715.dts"
+#include "/home/kazu/Work/Omarchy-M4-Native/dts/camera-m4/t8132-j715-dart-resources.dtsi"
+EOF
+clang -E -P -x assembler-with-cpp -nostdinc -undef -D__DTS__ \
+  -I /home/kazu/j715/kbuild/include /tmp/j715-camera-resource-check.dts \
+  > /tmp/j715-camera-resource-check.pp.dts
+/home/kazu/j715/kbuild/scripts/dtc/dtc -I dts -O dtb \
+  -o /tmp/j715-camera-resource-check.dtb /tmp/j715-camera-resource-check.pp.dts
+```
+
+追加で既存 IORegistry converter のテスト8件も成功した。
+DTB 比較では boot CPU と reservation map も不変であることを確認した。

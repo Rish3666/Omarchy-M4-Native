@@ -64,3 +64,15 @@ CAMERA_BUILD_JOBS=8 bash tools/build-j715-camera.sh /path/to/reviewed/kernel-git
 生成した作業コピーだけを除去できる。将来の起動試験前には known-good kernel/modules/DTB/boot chain の
 hash と復旧エントリーからの実起動を確認し、別名の実験成果物を一回だけ選択して試す。
 既定 boot entry の変更、NVRAM/EFI 更新、firmware flash は行わない。
+
+追加実装（macOS 実機採取後）:
+
+- `tools/camera-m4-hardware.py`: arm-io address translation、DART instance/DAPF、firmware segment、
+  PMGR virtual/physical を区別して解析し、IOService と上流 T8132 の値を照合する。
+- `dts/camera-m4/t8132-j715-dart-resources.dtsi`: 実機値に基づく3つの DART resource 草案。
+  全ノード disabled、production DTS と kernel patch series へは未組込。
+  power domain と backend remap/locked-root 対応を検証する前に有効化してはならない。
+  未確定の ISP mailbox/clock と、boot-dependent firmware reserved-memory は追加していない。
+
+この草案は既存 J715 DTS と合わせて cpp/dtc でコンパイルできた。
+既存ノードの property はすべて不変で、追加は無効な3つの DART ノードだけであることを比較確認した。

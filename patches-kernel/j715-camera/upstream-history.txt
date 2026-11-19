@@ -1,0 +1,165 @@
+a42c128a86c0710806b203c5f78cb7e030565343
+Author: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Subject: media: apple: isp: Zero the lens shading strides of H17 setfiles
+Signed-off-by: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+a7ed025103dadb01d8bc6998dad9662e8959be58
+Author: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Subject: media: apple: isp: Add T6040 support
+Signed-off-by: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+de5f82a04fd793eab583511c8e28840dca272ffd
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: Keep T8140 off the T6040 setfile and main memory paths
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+74e7d2bb38f8dd0cad140624812d849e083ed53f
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: add IMX958 P010 preview and config discovery
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+2a5ef7da4b7e9eb7f2fc3ad1cb84173e6026de32
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: reject P010 command ACKs after the deadline
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+b072f206dfc65b2de8d9558d959ba0c3c46de73d
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: requeue the last IMX958 NV12 buffer immediately
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+800aa7f358f5930f040a1f0aa55d779dd52ddd1c
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: accept full-width P010 completion address pairs
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+b0ca3cee54afa08ba8f2d40df717e696fcfddd4b
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: remove parameter-controlled format exposure
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+3d3d6ff59056fc61844ef58531d2ad4bffa3de4c
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: copy complete IPC messages with FORTIFY enabled
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+7a32d672dfc9291a2d17994fd4f686b819da38b8
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: use the contiguous single-planar capture API
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+b435c6c60110a114b7097877aacf35d598c537f1
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: let a P010 queue allocate its two buffers
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+86092424459bfd6d417a1f69372c01e23e38c5d3
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: report and propagate sensor tuning failures
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+338bff6ddf238b266ff2dd4f68240610615e9697
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: account for NV12 flicker replies in tuning tests
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+1e7c5daa7e3220549955c0659c7bf8e4d86a9157
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: report the frame gain and exposure
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+91a1c6487df8af081dd067b0840e7f4b1e66f81e
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple-isp: derive call sizes from processed crop extents
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+d9a5c3bb53e806776f1874ed2676d2d2ee811a9f
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: allocate IOVA ranges without drm_mm
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+fb310d822f4204746f57fffbde81e528c32efb78
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: recover from a timed-out P010 command
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+e0b635eef977de6ae57cd4d6a51d87f1801fe0a3
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: set up the temporal filter per sensor as macOS does
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+14bfc0869cf4c4ca6755ab0c56e72c2ac05af58a
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: media: apple: isp: tell auto exposure the mains frequency
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+00e88f127ec23bee3605e54c7bd9338ff022980f
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Program the DART address filter
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+05d1fb1164e7888ed348881b9be77c592f928518
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Let resident firmware start at the first stream
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+5f3511a0e7e93395a83273946947e84cb93bf593
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Add T8132 support
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+d048a44f98da8d2b452d81c8412ea292aa0a6209
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Optionally restore the firmware data before each start
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+9e0ff10bec022b5ef8c505b9535632e6a12504e9
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Power restartable firmware down completely
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+a17e540a0df57cb4b304b15212a5f3eb5de45037
+Author: Erik Bourget <erik@ebourget.net>
+Subject: media: apple: isp: Power the T8132 ISP down between streams
+Signed-off-by: Erik Bourget <erik@ebourget.net>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+58900fd9293b2d1e256b7e7c62792a12c47b8b65
+Author: Thomas Glanzmann <thomas@glanzmann.de>
+Subject: media: apple: isp: Add T8142 (M5)
+Signed-off-by: Thomas Glanzmann <thomas@glanzmann.de>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+af2676a9ee596bc94bb016d52a925ce550c46963
+Author: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Subject: arm64: dts: apple: t604x-j614-j616: scale the 720p camera preset
+Signed-off-by: Jonathan Goyvaerts <jonathan.goyvaerts@gmail.com>
+Signed-off-by: Eduard Moldovan <edimoldovan@gmail.com>
+
+f57d9004043387ed6c437ddf0afcfcc1bb49f2fd
+Author: Ryan Murray <ryan@aurorasilicon.org>
+Subject: iommu/apple-dart: Support T8140 DARTs and firmware-owned stream roots
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>

@@ -1,0 +1,76 @@
+From: Kazuhide Takahashi <kazuhide.t@linux-powered.com>
+Subject: [PATCH 6/6] media: apple: isp: Let the J715 owner opt in to capture
+
+Patch 3 refuses every J715 stream until the camera indicator is verified.
+On a J715 the light follows the sensor power, which the ISP firmware
+switches with each stream: it was on during every test stream and off
+after it, and the driver never touches it. Keep refusing by default, and
+let the owner allow capture with "options apple_isp j715_allow_capture=1",
+read only when the module loads.
+
+When the firmware does not acknowledge the suspend request it is stopped
+without powering the sensor down, and the light can stay on until the
+system firmware resets the camera PMU. Say so on J715, with the recovery.
+
+---
+--- a/drivers/media/platform/apple/isp/isp-drv.c
++++ b/drivers/media/platform/apple/isp/isp-drv.c
+@@ -1260,6 +1260,7 @@
+ MODULE_AUTHOR("Eileen Yoon <eyn@gmx.com>");
+ MODULE_DESCRIPTION("Apple ISP driver");
+ MODULE_LICENSE("GPL v2");
++MODULE_VERSION("j715-camera-1.1-20261119");
+ 
+ #if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
+ #include "isp-drv-test.c"
+--- a/drivers/media/platform/apple/isp/isp-fw.c
++++ b/drivers/media/platform/apple/isp/isp-fw.c
+@@ -1085,8 +1085,12 @@
+ 	 * Stop the coprocessor before releasing any memory the firmware
+ 	 * uses, also when it did not acknowledge the suspend request.
+ 	 */
+-	if (isp_stop_command_processor(isp))
++	if (isp_stop_command_processor(isp)) {
+ 		dev_warn(isp->dev, "firmware did not suspend, stopping it\n");
++		if (isp->privacy_blocked)
++			dev_warn(isp->dev,
++				 "J715: the camera light may stay on; holding the power button until the startup options appear clears it\n");
++	}
+ 	isp_disable_irq(isp);
+ 	isp_firmware_stop(isp);
+ }
+--- a/drivers/media/platform/apple/isp/isp-v4l2.c
++++ b/drivers/media/platform/apple/isp/isp-v4l2.c
+@@ -519,14 +519,29 @@
+ 	}
+ }
+ 
++/*
++ * J715: the camera light is driven with the sensor power, which the ISP
++ * firmware switches with each stream; the driver never touches the light.
++ * On the owner's J715 the light was on during every stream and off after it.
++ * Capture still stays refused until the owner opts in with
++ * "options apple_isp j715_allow_capture=1" (read at module load only).
++ */
++static bool j715_allow_capture;
++module_param(j715_allow_capture, bool, 0444);
++MODULE_PARM_DESC(j715_allow_capture, "J715: allow camera capture (owner opt-in, read at load)");
++
+ static int apple_isp_start_streaming(struct apple_isp *isp)
+ {
+ 	unsigned long flags;
+ 	int err;
+ 
+-	/* Refuse capture before starting firmware or submitting DMA buffers. */
+-	if (isp->privacy_blocked) {
+-		dev_err(isp->dev, "J715 camera indicator unverified; capture blocked\n");
++	/*
++	 * Refuse capture before starting firmware or submitting DMA buffers,
++	 * unless the owner allowed the J715 camera at module load.
++	 */
++	if (isp->privacy_blocked && !j715_allow_capture) {
++		dev_err_ratelimited(isp->dev,
++			"J715 camera not enabled; set apple_isp j715_allow_capture=1 to allow capture\n");
+ 		return -EACCES;
+ 	}
+ 

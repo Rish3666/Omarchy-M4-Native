@@ -1,0 +1,60 @@
+--- a/drivers/media/platform/apple/isp/isp-drv.c
++++ b/drivers/media/platform/apple/isp/isp-drv.c
+@@ -545,6 +545,8 @@
+ 
+ 	isp->dev = dev;
+ 	isp->hw = of_device_get_match_data(dev);
++	/* J715's indicator mechanism has not been established on this port. */
++	isp->privacy_blocked = of_machine_is_compatible("apple,j715");
+ 	platform_set_drvdata(pdev, isp);
+ 	dev_set_drvdata(dev, isp);
+ 
+--- a/drivers/media/platform/apple/isp/isp-drv.h
++++ b/drivers/media/platform/apple/isp/isp-drv.h
+@@ -436,6 +436,8 @@
+ 	size_t ipc_boot_size;
+ 
+ 	unsigned long state;
++	/* Block capture until the board's active-camera indication is verified. */
++	bool privacy_blocked;
+ 	spinlock_t buf_lock;
+ 	struct list_head bufs_pending;
+ 	struct list_head bufs_submitted;
+--- a/drivers/media/platform/apple/isp/isp-v4l2-test.c
++++ b/drivers/media/platform/apple/isp/isp-v4l2-test.c
+@@ -393,7 +393,20 @@
+ 	KUNIT_EXPECT_EQ(test, isp->frame_gain, 600);
+ }
+ 
++/* No hardware description: reaching firmware startup would be a test failure. */
++static void isp_test_privacy_block_precedes_firmware_start(struct kunit *test)
++{
++	struct apple_isp *isp = isp_test_alloc(test);
++
++	isp->dev = kunit_device_register(test, "apple-isp-privacy-test");
++	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, isp->dev);
++	isp->privacy_blocked = true;
++	KUNIT_EXPECT_EQ(test, apple_isp_start_streaming(isp), -EACCES);
++	KUNIT_EXPECT_FALSE(test, test_bit(ISP_STATE_STREAMING, &isp->state));
++}
++
+ static struct kunit_case isp_v4l2_test_cases[] = {
++	KUNIT_CASE(isp_test_privacy_block_precedes_firmware_start),
+ 	KUNIT_CASE(isp_test_meta_exposure),
+ 	KUNIT_CASE(isp_test_imx958_last_lease_requeue),
+ 	KUNIT_CASE(isp_test_p010_report_defers_completion),
+--- a/drivers/media/platform/apple/isp/isp-v4l2.c
++++ b/drivers/media/platform/apple/isp/isp-v4l2.c
+@@ -523,6 +523,12 @@
+ {
+ 	unsigned long flags;
+ 	int err;
++
++	/* Refuse capture before starting firmware or submitting DMA buffers. */
++	if (isp->privacy_blocked) {
++		dev_err(isp->dev, "J715 camera indicator unverified; capture blocked\n");
++		return -EACCES;
++	}
+ 
+ 	err = apple_isp_start_camera(isp);
+ 	if (err) {

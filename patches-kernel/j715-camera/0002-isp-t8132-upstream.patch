@@ -1952,7 +1952,6 @@ index 0000000000000000000000000000000000000000..dbddb079a0f572c448778a32dfd360d2
 +
 +kunit_test_suite(isp_hw_test_suite);
 diff --git a/drivers/media/platform/apple/isp/isp-drv.c b/drivers/media/platform/apple/isp/isp-drv.c
-index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece9014e78740b 100644
 --- a/drivers/media/platform/apple/isp/isp-drv.c
 +++ b/drivers/media/platform/apple/isp/isp-drv.c
 @@ -5,10 +5,12 @@
@@ -2010,7 +2009,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  static void apple_isp_detach_genpd(struct apple_isp *isp)
  {
  	if (isp->pd_count <= 1)
-@@ -144,17 +181,116 @@ static int apple_isp_map_fw_mmio(struct apple_isp *isp)
+@@ -144,17 +181,116 @@
  	return 0;
  }
  
@@ -2133,7 +2132,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  
  	isp->domain = iommu_get_domain_for_dev(isp->dev);
  	if (!isp->domain)
-@@ -162,30 +298,38 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+@@ -162,30 +298,38 @@
  	isp->shift = __ffs(isp->domain->pgsize_bitmap);
  	isp->fw_iova_mask = isp->hw->fw_iova_mask ?: U64_MAX;
  
@@ -2154,16 +2153,13 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	}
  
 -	end = maps + size / sizeof(__be32);
--
++	isp->fw.heap_base = heap_base;
++	isp->fw.heap_top = heap_base + heap_size;
+ 
 -	while (maps < end) {
 -		maps++;
 -		maps = of_translate_dma_region(dev->of_node, maps, &heap_base,
 -					       &heap_size);
--	}
--
-+	isp->fw.heap_base = heap_base;
- 	isp->fw.heap_top = heap_base + heap_size;
- 
 +	/*
 +	 * Where the bootloader loads the firmware's data, it backs the
 +	 * firmware's main memory only up to the end of it. The rest, up to
@@ -2185,12 +2181,14 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
 +	} else if (err != -ENOENT) {
 +		dev_err(dev, "No valid iommu-addresses found for data\n");
 +		return -ENODEV;
-+	}
-+
+ 	}
+ 
+-	isp->fw.heap_top = heap_base + heap_size;
+-
  	err = of_property_read_u64(dev->of_node, "apple,dart-vm-size",
  				   &vm_size);
  	if (err) {
-@@ -195,11 +339,11 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+@@ -195,11 +339,11 @@
  
  	// FIXME: refactor this, maybe use regular iova stuff?
  	isp->iova_size = vm_size - (heap_base & 0xffffffff);
@@ -2204,7 +2202,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  		return err;
  	}
  
-@@ -209,7 +353,8 @@ static int apple_isp_init_iommu(struct apple_isp *isp)
+@@ -209,7 +353,8 @@
  static void apple_isp_free_iommu(struct apple_isp *isp)
  {
  	apple_isp_unmap_fw_mmio(isp, isp->hw->num_fw_mmio);
@@ -2214,9 +2212,9 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  }
  
  static int isp_of_read_coord(struct device *dev, struct device_node *np,
-@@ -434,6 +579,10 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -421,6 +566,10 @@
+ 	if (err)
  		isp->temporal_filter = 0;
- 	}
  
 +	/* the sensor connection layout, for firmware that takes it at boot */
 +	of_property_read_u32(dev->of_node, "apple,cam-connections-scheme",
@@ -2225,7 +2223,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	err = apple_isp_init_presets(isp);
  	if (err) {
  		dev_err(dev, "failed to initialize presets\n");
-@@ -482,6 +631,12 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -469,6 +618,12 @@
  		}
  	}
  
@@ -2238,7 +2236,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	/* Capture watchdog, where the ISP gates its frames on one */
  	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "wdt");
  	if (res) {
-@@ -503,7 +658,6 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -490,7 +645,6 @@
  		goto detach_genpd;
  	}
  
@@ -2246,7 +2244,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	mutex_init(&isp->video_lock);
  	spin_lock_init(&isp->buf_lock);
  	init_waitqueue_head(&isp->wait);
-@@ -512,6 +666,7 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -499,6 +653,7 @@
  	mutex_init(&isp->gc_lock);
  	INIT_LIST_HEAD(&isp->bufs_pending);
  	INIT_LIST_HEAD(&isp->bufs_submitted);
@@ -2254,7 +2252,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	isp->wq = alloc_workqueue("apple-isp-wq", WQ_UNBOUND, 0);
  	if (!isp->wq) {
  		dev_err(dev, "failed to create workqueue\n");
-@@ -531,12 +686,23 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -518,12 +673,23 @@
  		goto free_iommu;
  	}
  
@@ -2282,7 +2280,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	}
  
  	err = apple_isp_setup_video(isp);
-@@ -559,6 +725,7 @@ static int apple_isp_probe(struct platform_device *pdev)
+@@ -546,6 +712,7 @@
  detach_genpd:
  	apple_isp_detach_genpd(isp);
  free_isp:
@@ -2290,7 +2288,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	/* Nothing else can reach it before the video device is registered. */
  	kfree(isp);
  	return err;
-@@ -799,6 +966,192 @@ static const struct apple_isp_hw apple_isp_hw_t8140 = {
+@@ -786,6 +953,192 @@
  	.boot_mode = 1,
  	.capture_meta_size = ISP_CAPTURE_META_SIZE_T8140,
  	.resident_fw = true,
@@ -2483,7 +2481,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  };
  
  static const struct of_device_id apple_isp_of_match[] = {
-@@ -810,6 +1163,9 @@ static const struct of_device_id apple_isp_of_match[] = {
+@@ -797,6 +1150,9 @@
  	{ .compatible = "apple,t6030-isp", .data = &apple_isp_hw_t6030 },
  	{ .compatible = "apple,t6031-isp", .data = &apple_isp_hw_t6031 },
  	{ .compatible = "apple,t8140-isp", .data = &apple_isp_hw_t8140 },
@@ -2493,7 +2491,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	{},
  };
  MODULE_DEVICE_TABLE(of, apple_isp_of_match);
-@@ -850,8 +1206,8 @@ static __maybe_unused int apple_isp_freeze(struct device *dev)
+@@ -837,8 +1193,8 @@
  	/*
  	 * Hibernation hands the system from one kernel to another, and
  	 * firmware left running would go on using the memory of the kernel
@@ -2504,7 +2502,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  	 */
  	if (isp->hw->resident_fw) {
  		mutex_lock(&isp->video_lock);
-@@ -883,6 +1239,23 @@ static const struct dev_pm_ops apple_isp_pm_ops = {
+@@ -870,6 +1226,23 @@
  	RUNTIME_PM_OPS(apple_isp_runtime_suspend, apple_isp_runtime_resume, NULL)
  };
  
@@ -2528,7 +2526,7 @@ index 2cbdcd2fb00bde53900bd65693dca9cdbe7ac82f..3921e5f2e6b114e7eb831d0820ece901
  static struct platform_driver apple_isp_driver = {
  	.driver	= {
  		.name		= "apple-isp",
-@@ -891,9 +1264,14 @@ static struct platform_driver apple_isp_driver = {
+@@ -878,9 +1251,14 @@
  	},
  	.probe	= apple_isp_probe,
  	.remove	= apple_isp_remove,

@@ -864,11 +864,10 @@
  	}
  
  	return;
-@@ -73,6 +76,68 @@
- 		if (!isp->pd_link[i]) {
+@@ -74,6 +77,68 @@
  			apple_isp_detach_genpd(isp);
  			return -EINVAL;
-+		}
+ 		}
 +
 +		/*
 +		 * The domains of resident firmware are switched by the
@@ -930,9 +929,10 @@
 +		if (err) {
 +			apple_isp_unmap_fw_mmio(isp, i);
 +			return err;
- 		}
++		}
  	}
  
+ 	return 0;
 @@ -95,6 +160,7 @@
  	if (!isp->domain)
  		return -ENODEV;
@@ -996,17 +996,16 @@
  }
  
 -static enum isp_firmware_version isp_check_firmware_version(struct device *dev)
--{
 +static enum isp_firmware_version
 +isp_check_firmware_version(struct apple_isp *isp)
-+{
+ {
 +	struct device *dev = isp->dev;
  	enum isp_firmware_version version, compat;
-+
+ 
 +	/* The H17 interface is selected by match data, not by version. */
 +	if (isp->hw->fw_abi == ISP_FW_ABI_H17)
 +		return ISP_FIRMWARE_V_UNKNOWN;
- 
++
  	/* firmware version is just informative */
  	version = isp_read_fw_version(dev, "apple,firmware-version");
  	compat = isp_read_fw_version(dev, "apple,firmware-compat");
@@ -1058,23 +1057,7 @@
  	}
  
  	err = of_property_read_u32(dev->of_node, "apple,temporal-filter",
-@@ -323,16 +421,29 @@
- 	if (err)
- 		isp->temporal_filter = 0;
- 
-+	/*
-+	 * M3 MacBook Air firmware 14.7 stalls capture with temporal filter 1.
-+	 * The J615 has the J613's sensor and ISP configuration; only the J613
-+	 * has been tested.
-+	 */
-+	if ((of_machine_is_compatible("apple,j613") ||
-+	     of_machine_is_compatible("apple,j615")) &&
-+	    isp->fw_compat == ISP_FIRMWARE_V_14_7 &&
-+	    isp->temporal_filter == 1) {
-+		dev_info(dev, "using temporal filter 0 on M3 Air firmware 14.7\n");
-+		isp->temporal_filter = 0;
-+	}
-+
+@@ -326,13 +424,13 @@
  	err = apple_isp_init_presets(isp);
  	if (err) {
  		dev_err(dev, "failed to initialize presets\n");
@@ -1090,7 +1073,7 @@
  	}
  
  	isp->coproc = devm_platform_ioremap_resource_byname(pdev, "coproc");
-@@ -341,7 +452,8 @@
+@@ -341,7 +439,8 @@
  		goto detach_genpd;
  	}
  
@@ -1100,7 +1083,7 @@
  	if (IS_ERR(isp->mbox)) {
  		err = PTR_ERR(isp->mbox);
  		goto detach_genpd;
-@@ -353,10 +465,32 @@
+@@ -353,10 +452,32 @@
  		goto detach_genpd;
  	}
  
@@ -1137,7 +1120,7 @@
  	}
  
  	isp->irq = platform_get_irq(pdev, 0);
-@@ -374,6 +508,8 @@
+@@ -374,6 +495,8 @@
  	spin_lock_init(&isp->buf_lock);
  	init_waitqueue_head(&isp->wait);
  	INIT_LIST_HEAD(&isp->gc);
@@ -1146,28 +1129,24 @@
  	INIT_LIST_HEAD(&isp->bufs_pending);
  	INIT_LIST_HEAD(&isp->bufs_submitted);
  	isp->wq = alloc_workqueue("apple-isp-wq", WQ_UNBOUND, 0);
-@@ -406,13 +542,13 @@
+@@ -406,13 +529,13 @@
  	err = apple_isp_setup_video(isp);
  	if (err) {
  		dev_err(dev, "failed to register video device: %d\n", err);
 -		goto free_surface;
--	}
--
++		goto halt_firmware;
+ 	}
+ 
 -	dev_info(dev, "apple-isp probe!\n");
 -
--	return 0;
--
-+		goto halt_firmware;
-+	}
-+
-+	return 0;
-+
+ 	return 0;
+ 
 +halt_firmware:
 +	apple_isp_firmware_halt(isp);
  free_surface:
  	pm_runtime_disable(dev);
  	apple_isp_free_firmware_surface(isp);
-@@ -422,6 +558,9 @@
+@@ -422,6 +545,9 @@
  	destroy_workqueue(isp->wq);
  detach_genpd:
  	apple_isp_detach_genpd(isp);
@@ -1177,7 +1156,7 @@
  	return err;
  }
  
-@@ -430,11 +569,16 @@
+@@ -430,11 +556,16 @@
  	struct apple_isp *isp = platform_get_drvdata(pdev);
  
  	apple_isp_remove_video(isp);
@@ -1194,7 +1173,7 @@
  }
  
  static const struct apple_isp_hw apple_isp_hw_t8103 = {
-@@ -543,7 +687,7 @@
+@@ -543,7 +674,7 @@
  
  static const struct apple_isp_hw apple_isp_hw_t8122 = {
  	.gen = ISP_GEN_T8112,
@@ -1203,7 +1182,7 @@
  
  	.dsid_count = 1,
  	.dsid_clr_base0 = 0x2221c4000,
-@@ -603,6 +747,60 @@
+@@ -603,6 +734,60 @@
  	.meta_size = ISP_META_SIZE_T6031,
  };
  
@@ -1264,7 +1243,7 @@
  static const struct of_device_id apple_isp_of_match[] = {
  	{ .compatible = "apple,t8103-isp", .data = &apple_isp_hw_t8103 },
  	{ .compatible = "apple,t8112-isp", .data = &apple_isp_hw_t8112 },
-@@ -611,6 +809,7 @@
+@@ -611,6 +796,7 @@
  	{ .compatible = "apple,t6020-isp", .data = &apple_isp_hw_t6020 },
  	{ .compatible = "apple,t6030-isp", .data = &apple_isp_hw_t6030 },
  	{ .compatible = "apple,t6031-isp", .data = &apple_isp_hw_t6031 },
@@ -1272,7 +1251,7 @@
  	{},
  };
  MODULE_DEVICE_TABLE(of, apple_isp_of_match);
-@@ -635,6 +834,33 @@
+@@ -635,6 +821,33 @@
  	 */
  	apple_isp_video_suspend(isp);
  
@@ -1306,7 +1285,7 @@
  	return 0;
  }
  
-@@ -648,7 +874,12 @@
+@@ -648,7 +861,12 @@
  }
  
  static const struct dev_pm_ops apple_isp_pm_ops = {

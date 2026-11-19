@@ -15,11 +15,11 @@ system firmware resets the camera PMU. Say so on J715, with the recovery.
 ---
 --- a/drivers/media/platform/apple/isp/isp-drv.c
 +++ b/drivers/media/platform/apple/isp/isp-drv.c
-@@ -1273,6 +1273,7 @@
+@@ -1260,6 +1260,7 @@
  MODULE_AUTHOR("Eileen Yoon <eyn@gmx.com>");
  MODULE_DESCRIPTION("Apple ISP driver");
  MODULE_LICENSE("GPL v2");
-+MODULE_VERSION("j715-camera-1.0-20261119");
++MODULE_VERSION("j715-camera-1.1-20261119");
  
  #if IS_ENABLED(CONFIG_VIDEO_APPLE_ISP_KUNIT_TEST)
  #include "isp-drv-test.c"

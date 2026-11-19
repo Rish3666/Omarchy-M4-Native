@@ -31,10 +31,10 @@
 | 要素 | 置き場所 | 確認 |
 |---|---|---|
 | ISP ドライバー | `patches-kernel/j715-camera/series`（0001〜0006） | 検証済みの base に適用し、guarded の27ファイルすべて一致 |
-| 撮影の許可 | 0006: 既定は拒否、`options apple_isp j715_allow_capture=1` で許可 | 実機で確認 |
+| 撮影の許可 | 0006: 既定は拒否、`options apple_isp j715_allow_capture=1` で許可 | 実機で確認（モジュール j715-camera-1.1-20261119） |
 | DART 付け替え | 0005（カーネルに組み込み） | #16 と同じツリーに 0005 だけを当てた差分ビルド #17。再コンパイルは apple-dart.o のみ、.config 差分なし、symvers 同一。実機で stream 1,2,3,6,7,10,11 の TCR が 0x80 |
 | ISP の DT | `dts/camera-m4/t8132-j715-isp.dtsi`、`tools/build-j715-isp-dtb.py` | 試験した DTB（e1e9b6cc…）を1バイトも違わず再生成 |
-| loader の ISP 受け渡し | `patches-m1n1/j715-isp-handoff` | stock・backlight・ISP 受け渡しの stage2 を1バイトも違わず再現（m4-gravity-builder） |
+| loader の ISP 受け渡し | `patches-m1n1/j715-isp-handoff`（対象は J713・J715） | stock・backlight の stage2 を1バイトも違わず再現。J604 を外した ISP 受け渡しの stage2（249cdf58…）を実機で確認 |
 | 常用の起動環境 | `packaging/j715-camera/j715-camera-boot.py` | install・check・rollback を実機で使用 |
 | setfile | `tools/extract-imx958-setfile.py`（所有者の macOS で実行） | 2224_01 dce21e48…、2226_02 5e2e5c4a… |
 
@@ -52,6 +52,18 @@ firmware が停止の要求に応答しないまま止められると、セン�
 `packaging/j715-camera/README.md` 参照。stage2（バックライト＋ISP 受け渡し）、カーネル #17、ISP の DT を ESP の boot.bin に
 入れ、bootargs と initramfs はそのまま。`rollback` で切り替え前に戻せる。J715 の試験ビルドは omarchy-m4-update の対象外で、
 boot.bin を自動で書き換える仕組みは無い。
+
+## 機種名の扱い
+プロジェクトの検査（配布するコードは対応済み・試験中の機種名だけを書く）に合わせ、0001 から J613/J615 の
+temporal filter の補正（M3 の Air の firmware 14.7 用、J715 には無関係）を、stage2 の ISP 受け渡しから J604 を外した。
+series は fuzz 0 で適用でき、guarded の変化は isp-drv.c だけ。変更後のモジュール 1.1 と stage2 249cdf58… で、
+開閉5回（29.96 fps、カーネルのエラー0）と mpv の表示を実機で確認した。
+
+## 既知の観察
+mpv（0.41.0、ffmpeg 9.0.2、libplacebo、Mesa gallium）で `av://v4l2:/dev/video0` を閉じると、ffmpeg の
+「Some buffers are still owned by the caller on close」の後に、描画スレッドが解放済みのフレームを GPU へ送る
+memcpy（u_default_buffer_subdata）で SIGSEGV になる。表示中・他のアプリ・ブラウザーには影響せず、カーネルに
+ISP のエラーは出ない。ユーザー空間の終了処理の問題と判断している。
 
 ## 残る課題
 - スリープからの復帰（J715 の試験ビルドで suspend 自体に既知の問題あり）。

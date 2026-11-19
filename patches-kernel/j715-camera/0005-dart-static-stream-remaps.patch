@@ -117,7 +117,7 @@
 +#endif
 --- a/drivers/iommu/Kconfig
 +++ b/drivers/iommu/Kconfig
-@@ -315,6 +315,14 @@
+@@ -315,6 +315,15 @@
  
  	  Say Y here if you are using an Apple SoC.
  
@@ -125,6 +125,7 @@
 +	bool "KUnit tests for Apple DART static stream remaps" if !KUNIT_ALL_TESTS
 +	depends on APPLE_DART && KUNIT
 +	depends on KUNIT=y || APPLE_DART=m
++	default KUNIT_ALL_TESTS
 +	help
 +	  Test static remap validation and TCR programming using memory-backed
 +	  registers. No IOMMU hardware is accessed.

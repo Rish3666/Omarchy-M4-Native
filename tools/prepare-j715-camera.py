@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Apply the pinned camera series to a separate copy of the known 7.1.9 source."""
+"""Apply the pinned camera series to a separate copy of the known 7.1.9 source.
+
+The copy gets its own release, 7.1.9-omarchy-m4-camera-test, so an offline or
+KUnit build of it can never be mistaken for, or loaded into, the installed
+kernel. It is not how the installable artifacts are made: those keep the
+owner's release 7.1.9-m4-gpu-backport-20261008 (see packaging/j715-camera).
+"""
 import argparse
 import hashlib
 import json
@@ -83,7 +89,7 @@ def prepare(source, output):
               'input_config_sha256': digest(source / '.config'),
               'input_makefile_sha256': digest(source / 'Makefile'),
               'patch_sha256': {name: digest(PATCHES / name) for name in series},
-              'privacy': 'J715 capture blocked pending verified indicator',
+              'privacy': 'J715 capture refused unless the owner sets apple_isp j715_allow_capture=1 (patch 0006)',
               'full_source_git_provenance': False}
     (output / 'camera-preparation.json').write_text(json.dumps(record, indent=2) + '\n')
     return output

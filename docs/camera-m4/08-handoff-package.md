@@ -4,9 +4,9 @@
 
 作業領域の出力先:
 
-- `/home/kazu/Work/j715-camera-handoff-20261116/`
-- `/home/kazu/Work/j715-camera-handoff-20261116.tar.gz`
-- `/home/kazu/Work/j715-camera-handoff-20261116.tar.gz.sha256`
+- `~/Work/j715-camera-handoff-20261116/`
+- `~/Work/j715-camera-handoff-20261116.tar.gz`
+- `~/Work/j715-camera-handoff-20261116.tar.gz.sha256`
 
 入口は引継ぎセット直下の `START-HERE-ja.md`。
 これは `07-handoff-instructions-ja.md` のコピーであり、VM 環境・依頼履歴・調査結果・実行手順をまとめた。
@@ -44,8 +44,8 @@ mount 変更・filesystem 修復・既存データの上書きは行っていな
 書き込み可能な環境になった後に、Linux 側で以下を実行できる:
 
 ```bash
-cp -n /home/kazu/Work/j715-camera-handoff-20261116.tar.gz \
-      /home/kazu/Work/j715-camera-handoff-20261116.tar.gz.sha256 /mnt/transfer/
+cp -n ~/Work/j715-camera-handoff-20261116.tar.gz \
+      ~/Work/j715-camera-handoff-20261116.tar.gz.sha256 /mnt/transfer/
 cd /mnt/transfer
 sha256sum -c j715-camera-handoff-20261116.tar.gz.sha256
 ```

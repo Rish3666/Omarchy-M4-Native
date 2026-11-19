@@ -1,6 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
 # Build an offline experimental artifact from a reviewed, already ported tree.
+# It uses its own release (*-omarchy-m4-camera-test), so it cannot be loaded into the
+# installed kernel; the installable artifacts are described in packaging/j715-camera.
 # No installation, initramfs regeneration, boot entry or firmware changes.
 set -euo pipefail
 [[ $# == 2 ]] || { echo "usage: $0 CLEAN_KERNEL_GIT_TREE NEW_OUTPUT_DIRECTORY" >&2; exit 2; }

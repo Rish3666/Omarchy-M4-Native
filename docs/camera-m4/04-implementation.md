@@ -39,12 +39,12 @@ T6050 の GPIO、firmware 予約物理アドレス、センサー設定は含め
 再現手順:
 
 ```sh
-python3 tools/prepare-j715-camera.py /home/kazu/j715/kbuild /path/to/new-camera-source
+python3 tools/prepare-j715-camera.py ~/j715/kbuild /path/to/new-camera-source
 # この対話のローカル Linux では bindgen 不足で失敗した。ユーザー VM は別途検査する。
 make -C /path/to/new-camera-source ARCH=arm64 LLVM=1 rustavailable
 ```
 
-実行済み出力は `/home/kazu/Work/camera-build/t8132-kernel-final`。
+実行済み出力は `~/Work/camera-build/t8132-kernel-final`。
 base の ISP 全ファイルと最終 ISP の hash は manifest、パッチ hash・入力 config/Makefile hash は
 出力ツリーの camera-preparation.json に記録する。
 元 kbuild の upstream Git commit は不明であり、完全なソースの再現性まで確立したとは扱わない。
@@ -89,7 +89,7 @@ hash と復旧エントリーからの実起動を確認し、別名の実験成
   mode/geometry/state だけを抽出し、setfile revision と indicator 方式を勝手に推定しない。
 - prepare ツールは DART C/Kconfig/新規 KUnit source の base hash も検査し、5パッチ全体の
   適用後 hash を確認してから完全 kernel コピーを作る。
-  実行済みの最新ツリーは `/home/kazu/Work/camera-build/t8132-kernel-remap`。
+  実行済みの最新ツリーは `~/Work/camera-build/t8132-kernel-remap`。
 - `dts/camera-m4/j715-imx958-preview-presets.dtsi` に config 6 / processed 3040x2880 に基づく
   1280x720 の実験 preview を追加した。crop は中央の 880,1080,1280,720 として計算した 1:1 crop。
   **macOS で観測した出力 crop ではなく、未検証の開発用選択**。まだ有効な ISP node に組み込まない。

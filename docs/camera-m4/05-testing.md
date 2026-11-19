@@ -24,26 +24,26 @@
 python3 -m unittest discover -s tests -p 'test*camera*.py' -v
 bash -n tools/camera-m4-fetch.sh tools/build-j715-camera.sh
 git diff --check
-python3 tools/prepare-j715-camera.py /home/kazu/j715/kbuild /path/to/new-camera-source
+python3 tools/prepare-j715-camera.py ~/j715/kbuild /path/to/new-camera-source
 ```
 
-準備の実行済み出力: `/home/kazu/Work/camera-build/t8132-kernel-final`。
+準備の実行済み出力: `~/Work/camera-build/t8132-kernel-final`。
 元の kbuild は変更していない。出力は -omarchy-m4-camera-test を config に設定済み。
 
-ビルド検証は元 kbuild を `/home/kazu/Work/camera-build/baseline` に複製してから実施。
+ビルド検証は元 kbuild を `~/Work/camera-build/baseline` に複製してから実施。
 M= で独立した外部モジュール出力を使い、mc/v4l2-core/videobuf2/ISP をまとめて link した。
 KUnit 込みでは lib/kunit も含めた。CONFIG_VIDEOBUF2_DVB=n は無関係な DVB bridge を対象から外す
 この module-only 検証用の指定であり、実験 kernel の保存 config は変更していない。
 
 ```sh
 # 下の M ディレクトリには必要な依存ソースと更新済み ISP を配置済み
-make -C /home/kazu/Work/camera-build/baseline ARCH=arm64 LLVM=1 W=1 -j8 CONFIG_VIDEOBUF2_DVB=n M=/home/kazu/Work/camera-build/pr421 modules
+make -C ~/Work/camera-build/baseline ARCH=arm64 LLVM=1 W=1 -j8 CONFIG_VIDEOBUF2_DVB=n M=~/Work/camera-build/pr421 modules
 # KUnit を含めた比較検証（実行はしない）
-make -C /home/kazu/Work/camera-build/baseline ARCH=arm64 LLVM=1 W=1 -j8 CONFIG_VIDEOBUF2_DVB=n KCFLAGS=-DCONFIG_VIDEO_APPLE_ISP_KUNIT_TEST=1 M=/home/kazu/Work/camera-build/pr421 modules
+make -C ~/Work/camera-build/baseline ARCH=arm64 LLVM=1 W=1 -j8 CONFIG_VIDEOBUF2_DVB=n KCFLAGS=-DCONFIG_VIDEO_APPLE_ISP_KUNIT_TEST=1 M=~/Work/camera-build/pr421 modules
 ```
 
-最終ログは `/home/kazu/Work/camera-build/t8132-final-build.log` と
-`/home/kazu/Work/camera-build/t8132-final-kunit-build.log`。
+最終ログは `~/Work/camera-build/t8132-final-build.log` と
+`~/Work/camera-build/t8132-final-kunit-build.log`。
 以前の単独 ISP/全 media/KUnit 依存なしの試行は、それぞれ未解決外部シンボルで失敗したが、
 必要な依存を同時ビルドした最終試行は modpost を含め成功した。
 元カーネルの Clang 21.1.8 と実行中の 23.1.4 の差異警告は残る。
@@ -53,7 +53,7 @@ IPC payload copy の FORTIFY 警告は patch 0004 で解消し、最終ログに
 実験 kernel 一式の代わりにインストールしてはならない。既存 module の上書きやロードはしていない。
 
 実験ツリーの `make ARCH=arm64 LLVM=1 rustavailable` は bindgen 不在で失敗した。
-ログは `/home/kazu/Work/camera-build/t8132-rust-preflight.log`（同じ ISP で IPC 警告修正前の
+ログは `~/Work/camera-build/t8132-rust-preflight.log`（同じ ISP で IPC 警告修正前の
 隔離ツリーに対する toolchain 検査）。Rust を無効化して GPU なしの Image を作る代替は行わない。
 互換ツールチェーンが揃った後に、フルビルドと config の Rust/GPU/audio 維持を検証する必要がある。
 
@@ -90,7 +90,7 @@ macOS 採取後の追加検証:
 - DART resource 草案を J715 DTS と一緒に cpp/dtc でコンパイル成功。
   base/candidate を比較して既存ノードの全 property 不変と、追加3ノードが disabled であることを確認。
   各 reg/IRQ/remap/DAPF は採取値と照合した。
-- 比較用 DTB とログは `/home/kazu/Work/camera-build/macos-derived/`。
+- 比較用 DTB とログは `~/Work/camera-build/macos-derived/`。
   /boot への配置、実機への適用、再起動、撮影は行っていない。
 
 草案の構文チェックは dtbs_check や実機動作の証明ではない。
@@ -101,13 +101,13 @@ macOS 採取後の追加検証:
 
 ```sh
 cat > /tmp/j715-camera-resource-check.dts <<'EOF'
-#include "/home/kazu/j715/kbuild/arch/arm64/boot/dts/apple/t8132-j715.dts"
-#include "/home/kazu/Work/Omarchy-M4-Native/dts/camera-m4/t8132-j715-dart-resources.dtsi"
+#include "~/j715/kbuild/arch/arm64/boot/dts/apple/t8132-j715.dts"
+#include "~/Work/Omarchy-M4-Native/dts/camera-m4/t8132-j715-dart-resources.dtsi"
 EOF
 clang -E -P -x assembler-with-cpp -nostdinc -undef -D__DTS__ \
-  -I /home/kazu/j715/kbuild/include /tmp/j715-camera-resource-check.dts \
+  -I ~/j715/kbuild/include /tmp/j715-camera-resource-check.dts \
   > /tmp/j715-camera-resource-check.pp.dts
-/home/kazu/j715/kbuild/scripts/dtc/dtc -I dts -O dtb \
+~/j715/kbuild/scripts/dtc/dtc -I dts -O dtb \
   -o /tmp/j715-camera-resource-check.dtb /tmp/j715-camera-resource-check.pp.dts
 ```
 
@@ -120,7 +120,7 @@ DTB 比較では boot CPU と reservation map も不変であることを確認�
 - macOS の Streaming=Yes snapshot と、ログの Streaming 1 → 0 を確認した。
 - ユーザーはセンサーエリア LED の使用中点灯・終了後消灯を観測。Linux indicator の検証とは区別する。
 - DART patch 0005 の normal/KUnit 込み module build は W=1 で成功。
-  ログは `/home/kazu/Work/camera-build/dart-remap-build.log` と `dart-remap-kunit-build.log`。
+  ログは `~/Work/camera-build/dart-remap-build.log` と `dart-remap-kunit-build.log`。
   warning は既存 kernel Clang 21.1.8 と現在の 23.1.4 の差異のみ。KUnit は未実行。
 - 5パッチの準備済み tree の全最終 hash を manifest と照合した。
 - IMX958 preview fragment の test wrapper を cpp/dtc でコンパイルした。

@@ -7,8 +7,11 @@ and replaces three parts with verified files from this directory:
   loader   stage2-ispd-m1n1.bin  (the backlight stage2 plus the ISP handoff)
   kernel   Image-dart-remap.gz   (#16 plus the DART stream remap, patch 0005)
   dtb      j715-isp-f.dtb        (the live tree plus the J715 ISP nodes)
-The camera module (apple-isp.ko, j715-camera-1.0) goes to updates/.
-Capture stays refused until the owner runs allow-capture.
+The camera module (apple-isp.ko, j715-camera-1.1) goes to updates/.
+Capture stays refused until the owner runs allow-capture, which sets
+apple_isp j715_allow_capture=1 for the next load of the module.
+Every artifact must match the hashes pinned in ARTIFACTS.sha256 (the tested
+build) as well as the owner's SHA256SUMS.
 
   status | module-install | prepare | install --approved | check
   allow-capture | block-capture
@@ -147,14 +150,32 @@ def newc(name, data, mode=0o100644):
 
 
 
-def verify_kit():
+def read_sums(path):
     sums = {}
-    for line in (KIT / 'SHA256SUMS').read_text().splitlines():
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.startswith('#'):
+            continue
         digest, name = line.split(None, 1)
-        sums[name.lstrip('*')] = digest
-    for name in list(VARIANTS.values()) + [TEST_DTB, MODULE, KERNEL_GZ, 'j715-camera-boot.py']:
-        if sums.get(name) != sha_file(KIT / name):
+        sums[name.strip().lstrip('*')] = digest
+    return sums
+
+
+def verify_kit():
+    """Check the artifacts against the tested build's pins and the owner's sums."""
+    artifacts = list(VARIANTS.values()) + [TEST_DTB, MODULE, KERNEL_GZ]
+    pins_file = KIT / 'ARTIFACTS.sha256'
+    if not pins_file.exists():
+        fail('ARTIFACTS.sha256 (the tested build\'s pins) is missing next to the script')
+    pins = read_sums(pins_file)
+    sums = read_sums(KIT / 'SHA256SUMS')
+    for name in artifacts:
+        digest = sha_file(KIT / name)
+        if pins.get(name) != digest:
+            fail(f'{name} is not the tested build pinned in ARTIFACTS.sha256')
+        if sums.get(name) != digest:
             fail(f'{name} does not match SHA256SUMS')
+    if sums.get('j715-camera-boot.py') != sha_file(KIT / 'j715-camera-boot.py'):
+        fail('j715-camera-boot.py does not match SHA256SUMS')
 
 
 def write_atomic(path, data, mode=0o644):
@@ -182,7 +203,8 @@ def save_result(name, obj):
     text = obj if isinstance(obj, str) else json.dumps(obj, indent=2) + '\n'
     (RESULT / name).write_text(text)
     sums = [f'{sha_file(p)}  {p.name}' for p in sorted(RESULT.iterdir())
-            if p.is_file() and p.name != 'SHA256SUMS' and not p.name.startswith('._')]
+            if p.is_file() and p.name not in ('SHA256SUMS', 'boot.bin.orig')
+            and not p.name.startswith('._')]
     (RESULT / 'SHA256SUMS').write_text('\n'.join(sums) + '\n')
 
 
@@ -216,7 +238,7 @@ def cmd_module_install(_):
     data = (KIT / MODULE).read_bytes()
     target = mod_target()
     if target.exists() and sha(target.read_bytes()) != sha(data):
-        fail(f'{target} exists and is not this kit\'s module')
+        fail(f'{target} is another apple-isp.ko; run module-remove first')
     for d in DEPS:
         r = run(['modinfo', '-k', RELEASE, '-F', 'filename', d])
         if r.returncode or not r.stdout.strip():
@@ -226,30 +248,38 @@ def cmd_module_install(_):
     r = run(['depmod', '-a', RELEASE])
     if r.returncode:
         fail(f'depmod failed: {r.stderr.strip()}')
-    r = run(['modprobe', '-n', '-v', '-S', RELEASE, 'apple-isp'])
-    out = {'module': str(target), 'sha256': sha(data), 'show_depends': r.stdout.strip().splitlines(),
+    # Ask the module index which file it resolves apple-isp to. Unlike 'modprobe -n -v',
+    # this also answers while an older apple_isp is loaded. /lib may be a symlink to usr/lib.
+    r = run(['modinfo', '-k', RELEASE, '-n', 'apple-isp'])
+    resolved = Path(r.stdout.strip()).resolve() if r.returncode == 0 and r.stdout.strip() else None
+    out = {'module': str(target), 'sha256': sha(data), 'resolves_to': str(resolved),
+           'loaded_now': Path('/sys/module/apple_isp').exists(),
            'installed': datetime.datetime.now().astimezone().isoformat(timespec='seconds')}
-    # /lib may be a symlink to usr/lib: compare the resolved paths of what modprobe would load.
-    loads = [Path(w).resolve() for line in r.stdout.splitlines() for w in line.split()
-             if w.endswith('.ko') or '.ko.' in w]
-    if target.resolve() not in loads:
-        fail(f'modprobe would not load {target}: {r.stdout.strip()} {r.stderr.strip()}')
+    if resolved != target.resolve():
+        fail(f'the module index resolves apple-isp to {resolved}, not {target}: {r.stderr.strip()}')
     save_result('module-install.json', out)
     print(json.dumps(out, indent=2))
-    print('the module only binds when the test devicetree hands the ISP over; capture always stays refused; arming permits only the IPC probe.')
+    print('the module binds when the camera devicetree hands the ISP over. Capture is refused '
+          'until allow-capture sets j715_allow_capture=1 for the next load of the module.')
+    if out['loaded_now']:
+        print('an apple_isp module is loaded now; the new one is used from the next boot.')
 
 
 def cmd_module_remove(_):
     need_root()
     target = mod_target()
     if target.exists():
-        if sha(target.read_bytes()) != sha((KIT / MODULE).read_bytes()):
-            fail(f'{target} is not this kit\'s module; left as it is')
+        # Any apple_isp module this tool placed in updates/, also one of an earlier kit.
+        r = run(['modinfo', '-F', 'name', str(target)])
+        if r.returncode or r.stdout.strip() != 'apple_isp':
+            fail(f'{target} is not an apple_isp module; left as it is')
+        removed = sha(target.read_bytes())
         target.unlink()
         run(['depmod', '-a', RELEASE])
-        save_result('module-remove.json', {'removed': str(target),
+        save_result('module-remove.json', {'removed': str(target), 'sha256': removed,
+                    'this_kit': removed == sha((KIT / MODULE).read_bytes()),
                     'at': datetime.datetime.now().astimezone().isoformat(timespec='seconds')})
-        print(f'removed {target} and ran depmod')
+        print(f'removed {target} ({removed[:12]}…) and ran depmod')
     else:
         print('the module is not installed')
 
@@ -304,7 +334,9 @@ def cmd_prepare(_):
           'prepared': datetime.datetime.now().astimezone().isoformat(timespec='seconds')}
     (STATE / 'state.json').write_text(json.dumps(st, indent=2) + '\n')
     RESULT.mkdir(exist_ok=True)
-    (RESULT / 'boot.bin.orig').write_bytes(orig)
+    # The whole original boot.bin: this Mac's boot arguments and Apple firmware. Root only;
+    # not for sharing (it is left out of the result's SHA256SUMS).
+    write_atomic(RESULT / 'boot.bin.orig', orig, 0o600)
     save_result('prepare.json', st)
     print(json.dumps({'orig_sha256': st['orig_sha256'], 'variant_sha256': variants}, indent=2))
     print("prepared; the ESP is unchanged. install needs the owner's approval.")
@@ -319,13 +351,15 @@ def cmd_install(a):
     if not mod_target().exists():
         fail('run module-install first')
     if sha_file(mod_target()) != sha_file(KIT / MODULE):
-        fail('installed module differs from this kit; remove the previous kit module and run module-install first')
+        fail('installed module differs from this kit; run module-remove, then module-install')
     st = load_state()
     if not st:
         fail('run prepare first')
     cur, which = esp_state(st)
     if which != 'original':
         fail(f'the ESP boot.bin is {which} ({cur}); restore first')
+    if not (STATE / f'boot.bin.{a.variant}').exists() or not (STATE / 'boot.bin.orig').exists():
+        fail('the prepared boot files are gone (cleanup removes them); run prepare again')
     new = (STATE / f'boot.bin.{a.variant}').read_bytes()
     orig = (STATE / 'boot.bin.orig').read_bytes()
     if sha(new) != st['variant_sha256'][a.variant] or sha(orig) != st['orig_sha256']:
@@ -337,10 +371,23 @@ def cmd_install(a):
         write_atomic(ESP_BACKUP, orig)
         if sha_file(ESP_BACKUP) != st['orig_sha256']:
             fail('the ESP backup copy did not verify')
-    write_atomic(BOOT, new)
-    if sha_file(BOOT) != st['variant_sha256'][a.variant]:
-        write_atomic(BOOT, orig)
-        fail('the written boot.bin did not verify; the original was put back')
+    try:
+        write_atomic(BOOT, new)
+        written = sha_file(BOOT)
+    except OSError as e:
+        written = f'error: {e}'
+    if written != st['variant_sha256'][a.variant]:
+        try:
+            write_atomic(BOOT, orig)
+            back = sha_file(BOOT)
+        except OSError as e:
+            back = f'error: {e}'
+        BOOT.with_name(BOOT.name + '.tmp').unlink(missing_ok=True)
+        if back == st['orig_sha256']:
+            fail(f'the written boot.bin did not verify ({written}); the original was put back and verified')
+        fail(f'the written boot.bin did not verify ({written}) and putting the original back failed '
+             f'({back}). Do not reboot: copy {ESP_BACKUP} to {BOOT} by hand and compare its SHA-256 '
+             f'with {st["orig_sha256"]}')
     save_result(f'install-{a.variant}.json', {'variant': a.variant, 'esp_boot_sha256': sha_file(BOOT),
                 'installed': datetime.datetime.now().astimezone().isoformat(timespec='seconds')})
     print('installed the camera boot environment. Reboot, then run check. '
@@ -431,9 +478,15 @@ def cmd_restore(_):
     orig = (STATE / 'boot.bin.orig').read_bytes()
     if sha(orig) != st['orig_sha256']:
         fail('the saved original changed')
-    write_atomic(BOOT, orig)
-    if sha_file(BOOT) != st['orig_sha256']:
-        fail('the restored boot.bin did not verify; copy boot.bin.orig by hand')
+    try:
+        write_atomic(BOOT, orig)
+        back = sha_file(BOOT)
+    except OSError as e:
+        back = f'error: {e}'
+    if back != st['orig_sha256']:
+        BOOT.with_name(BOOT.name + '.tmp').unlink(missing_ok=True)
+        fail(f'the restored boot.bin did not verify ({back}); do not reboot: copy {ESP_BACKUP} '
+             f'to {BOOT} by hand and compare its SHA-256 with {st["orig_sha256"]}')
     save_result(f'restore-{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}.json',
                 {'restored_from': which, 'esp_boot_sha256': st['orig_sha256']})
     print('restored the boot.bin from before the camera install. Reboot.')

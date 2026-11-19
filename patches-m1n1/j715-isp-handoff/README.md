@@ -19,8 +19,10 @@ Inputs (apply with `patch -p1` to `src/kboot.c`):
   (`kboot.c` 33f699e5…)
 
 `build-stage2.sh` builds stock, backlight and ISP-handoff stage2 in the
-`m4-gravity-builder:20261008-rebuilt` container (`/in`, `/out`). Its
-stock and backlight checks pin the known binaries. Built on 2026-11-19:
+`m4-gravity-builder:20261008-rebuilt` container (`/in`: the stage2 archive,
+`m1n1-base/` and `0001-stage2-isp-handoff.patch`; `/out`). The ISP-handoff
+stage2 is the backlight sources with this patch applied by `git apply`; all
+three outputs are checked against the pins below. Built on 2026-11-19:
 
 | stage2 | SHA-256 |
 |---|---|

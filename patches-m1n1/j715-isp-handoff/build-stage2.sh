@@ -4,6 +4,7 @@ in=/in out=/out
 source_sha=c394517941a5700b227718bb02e3df3dd43c9ad5a8e53c9447a55d3c36846c44
 stock_sha=3a3f7a64c65fc366d5ac9aece3e1bee64119be012aa1ec5b15d2743c6f91fce4
 hidden_sha=b86aee6840fe670b592271ec2816d42c5515cddc20a14e08bdc5bcbce547e6fd
+ispd_sha=249cdf58731270709c913b57abbc4d274cd929f8d15b774fd37ff801cc811cca
 tag=air-c9ef56f-gpu-stage2-20261008
 export PATH=/usr/lib/llvm-21/bin:$PATH
 mkdir -p $out
@@ -14,7 +15,8 @@ build() {
     tar xzf $in/m1n1-stage2-source.tar.gz -C "$tree" --strip-components=1
     rm -rf "$tree/build"
     if [ "$kind" != stock ]; then cp $in/m1n1-base/src/{kboot.c,dart.c,dart.h} "$tree/src/"; fi
-    if [ "$kind" = ispd ]; then cp $in/ispd/kboot.c "$tree/src/"; fi
+    # The committed patch, applied to the backlight kboot.c (no pre-patched copy).
+    if [ "$kind" = ispd ]; then (cd "$tree" && git apply --verbose $in/0001-stage2-isp-handoff.patch); fi
     ( cd "$tree"; export M1N1_VERSION_TAG=$version
       for pass in 1 2; do
         make BUILDSTD=1 USE_CLANG=1 TOOLCHAIN=/usr/lib/llvm-21/bin/ LLDDIR=/usr/lib/llvm-21/bin/ RELEASE=1 CHAINLOADING=0 NO_DISPLAY=1 -j8
@@ -29,5 +31,6 @@ test "$(sha256sum < $out/stage2-stock-m1n1.bin | cut -d' ' -f1)" = "$stock_sha" 
 build backlight "$tag-backlight1"
 test "$(sha256sum < $out/stage2-backlight-m1n1.bin | cut -d' ' -f1)" = "$hidden_sha" || { echo HIDDEN-MISMATCH; exit 1; }
 build ispd "$tag-backlight1-isphandoff1"
+test "$(sha256sum < $out/stage2-ispd-m1n1.bin | cut -d' ' -f1)" = "$ispd_sha" || { echo ISPD-MISMATCH; exit 1; }
 cd $out && sha256sum ./*.bin && ls -l ./*.bin
 echo BUILD-OK

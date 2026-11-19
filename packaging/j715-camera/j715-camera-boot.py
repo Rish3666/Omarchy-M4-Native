@@ -178,7 +178,8 @@ def verify_kit():
         fail('j715-camera-boot.py does not match SHA256SUMS')
 
 
-def write_atomic(path, data, mode=0o644):
+def write_atomic(path, data, mode=0o600):
+    """Write path atomically, root-only by default (modprobe and depmod run as root)."""
     tmp = path.with_name(path.name + '.tmp')
     with open(tmp, 'wb') as f:
         f.write(data)
@@ -244,7 +245,7 @@ def cmd_module_install(_):
         if r.returncode or not r.stdout.strip():
             fail(f'dependency {d} is not installed for {RELEASE}')
     target.parent.mkdir(exist_ok=True)
-    write_atomic(target, data, 0o644)
+    write_atomic(target, data, 0o600)
     r = run(['depmod', '-a', RELEASE])
     if r.returncode:
         fail(f'depmod failed: {r.stderr.strip()}')
@@ -526,9 +527,8 @@ def setfile_status():
 
 def cmd_allow_capture(_):
     need_root()
-    MODPROBE_CONF.write_text('# Owner opt-in: allow the J715 camera (j715-camera-boot.py allow-capture).\n'
-                             'options apple_isp j715_allow_capture=1\n')
-    os.chmod(MODPROBE_CONF, 0o644)
+    write_atomic(MODPROBE_CONF, b'# Owner opt-in: allow the J715 camera (j715-camera-boot.py allow-capture).\n'
+                                b'options apple_isp j715_allow_capture=1\n', 0o600)
     print(f'wrote {MODPROBE_CONF}. Takes effect at the next boot (or after reloading apple_isp).')
 
 

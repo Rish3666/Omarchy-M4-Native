@@ -1,22 +1,25 @@
 # M4 MacBook Air 15-inch（J715）カメラ開発
 
-現在: **PARTIAL / BLOCKED**。上流 #421 の T8132 ISP 対応を移植し、7.1.9 向けの
-通常・KUnit 込み module build に成功した。実機初期化・フレーム取得は未達成。
-J715 の ISP/DART 実値と IMX958 センサーは確認できたが、setfile revision/firmware handoff/Linux indicator が未確定なので、専用ガードで撮影を拒否する。
-既存カーネル・起動環境は変更していない。
+現在: **WORKING（所有者の J715、ローカルの起動環境）**。2026-11-19 に Linux の V4L2 で実フレームを取得し、
+PipeWire・ブラウザー・mpv で使えることを確認した。表示灯は撮影中だけ点灯する。
+決め手は ISP の DART の stream の付け替え（0005）と、macOS から抽出した IMX958 の setfile。
+詳細は [実機での立ち上げ結果](09-bringup-results-ja.md)。
 
 - [環境](01-environment.md)
 - [上流分析と実コミット](02-upstream-analysis.md)
 - [ハードウェア識別・macOS 採取](03-hardware-identification.md)
 - [実装・ビルド・ロールバック](04-implementation.md)
 - [実際の検証結果・実機試験手順](05-testing.md)
+- [実機での立ち上げ結果（2026-11-17〜19）](09-bringup-results-ja.md)
 
 | マイルストーン | 状態 |
 |---|---|
-| A: Hardware identified | PARTIAL: J715/T8132・ISP/DART・IMX958 確認、setfile/indicator/firmware handoff 未確認 |
-| B: Driver implemented | IMPLEMENTED / UNTESTED: T8132 module compile 済み、実機未初期化 |
-| C: Camera capture | BLOCKED: ISP DT なし、Linux indicator 未検証、撮影をコードで拒否 |
-| D: Desktop integration | BLOCKED: フル kernel build は VM で未検証。対話環境側は Rust 依存不足。PipeWire/browser 未検証 |
+| A: Hardware identified | WORKING: J715/T8132・ISP/DART・IMX958（モジュール FW 9.2.0）、setfile 2224_01、表示灯はセンサー電源と連動 |
+| B: Driver implemented | WORKING: patch 0001〜0006、DART 付け替え入りカーネル #17、ISP の DT、stage2 の ISP 受け渡し |
+| C: Camera capture | WORKING: 1920x1080 NV12 約 30 fps。既定は撮影拒否、所有者の opt-in（j715_allow_capture=1）で許可 |
+| D: Desktop integration | WORKING: PipeWire の Video Source、ブラウザー（getUserMedia）、mpv。suspend/resume は未検証 |
+
+以下は引継ぎ時点（2026-11-16）の記録。
 
 追加コードは 5 本の kernel patch、hash 検証付き準備・採取・独立ビルドツール、回帰テスト。
 `patches-kernel/j715-camera/series` と manifest に適用順・出所を固定した。

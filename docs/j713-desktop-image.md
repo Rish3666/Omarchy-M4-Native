@@ -232,7 +232,7 @@ remained enabled. Browser launches must inherit the matching M4 library paths;
 starting from a sparse SSH environment selected incompatible system libraries.
 
 The image helper also installs `etc/xdg/uwsm/env.d/90-m4-gdk-gl` to export
-`GDK_GL=gles` ([issue #158](https://github.com/Kb2uka/Omarchy-M4-Native/issues/158)).
+`GDK_GL=gles` ([issue #158](https://github.com/kazuhidet/Omarchy-M4-Native/issues/158)).
 The project's M4 Mesa libraries under `/opt/m4-mesa/lib` supply EGL, GLES and GBM
 without desktop OpenGL (`libGL.so`). By default GTK3 requests a desktop OpenGL
 context through libepoxy and falls back to software with broken textures when
